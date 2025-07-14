@@ -1228,6 +1228,7 @@ class BlacklistHandler:
             if success:
                 # 发送测试消息
                 try:
+                    from datetime import datetime
                     test_message = await context.bot.send_message(
                         chat_id=channel_id,
                         text=f"✅ 记录频道设置成功\n\n群组: {message.chat.title}\n时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
