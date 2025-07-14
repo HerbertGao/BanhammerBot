@@ -25,7 +25,8 @@ jobs:
     - name: Build and push Docker image
       run: |
         PLATFORMS=linux/arm64,linux/amd64
-        DOCKER_IMAGE=ghcr.io/${{ github.repository }}
+        # 强制仓库名小写
+        DOCKER_IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
         ARCH_TAGS="arm64 amd64"        
         VERSION=${{ inputs.version || github.sha }}
         
@@ -53,7 +54,7 @@ jobs:
     - name: Run security scan
       uses: aquasecurity/trivy-action@master
       with:
-        image-ref: ${{ env.DOCKER_IMAGE }}:${{ inputs.version || github.sha }}
+        image-ref: ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]'):${{ inputs.version || github.sha }}
         format: 'sarif'
         output: 'trivy-results.sarif'
 
