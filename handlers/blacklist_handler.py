@@ -1169,7 +1169,7 @@ class BlacklistHandler:
                     f"• 不同群组可以使用相同的记录频道\n\n"
                     f"<b>命令:</b>\n"
                     f"• /log_channel clear - 清除记录频道\n"
-                    f"• /log_channel <频道ID> - 设置记录频道"
+                    f"• /log_channel &lt;频道ID&gt; - 设置记录频道"
                 )
             else:
                 status_text = (
@@ -1181,7 +1181,7 @@ class BlacklistHandler:
                     f"• 记录包含来源群组信息\n"
                     f"• 不同群组可以使用相同的记录频道\n\n"
                     f"<b>命令:</b>\n"
-                    f"• /log_channel <频道ID> - 设置记录频道"
+                    f"• /log_channel &lt;频道ID&gt; - 设置记录频道"
                 )
             
             await context.bot.send_message(

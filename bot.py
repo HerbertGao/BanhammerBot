@@ -165,7 +165,7 @@ class BanhammerBot:
             "/global status - 查看当前设置\n"
             "/global stats - 查看通用黑名单统计\n"
             "/log_channel - 查看记录频道设置\n"
-            "/log_channel <频道ID> - 设置记录频道\n"
+            "/log_channel &lt;频道ID&gt; - 设置记录频道\n"
             "/log_channel clear - 清除记录频道\n"
             "/cleanup - 清理无效黑名单项\n"
             "/admin - 呼叫管理员\n\n"
