@@ -1,0 +1,26 @@
+services:
+  banhammer-bot:
+    image: ghcr.io/${GITHUB_REPOSITORY:-herbertgao/banhammerbot}:${VERSION:-latest}
+    container_name: banhammer-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # 持久化数据库
+      - ./data:/app/data
+      # 持久化日志
+      - ./logs:/app/logs
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/banhammer_bot.db')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - banhammer-network
+
+networks:
+  banhammer-network:
+    driver: bridge 
