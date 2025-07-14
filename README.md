@@ -51,7 +51,7 @@
 ### 1. 克隆项目
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/HerbertGao/BanhammerBot
 cd BanhammerBot
 ```
 
@@ -78,10 +78,7 @@ DATABASE_URL=sqlite:///data/banhammer_bot.db
 
 # 管理员用户ID列表 (用于私聊转发功能，多个ID用逗号分隔)
 # 未配置时将无管理员可用
-ADMIN_USER_IDS=254563965,123456789,987654321
-
-# 注意：记录频道现在由每个群组单独设置
-# 使用 /log_channel <频道ID> 命令为每个群组设置记录频道
+ADMIN_USER_IDS=123456789,987654321
 ```
 
 ### 4. 获取 Bot Token
@@ -137,22 +134,6 @@ docker run -d \
 > 💡 **Docker 部署**: 详细的 Docker 部署说明请参考 [DOCKER.md](DOCKER.md)
 
 ## 配置说明
-
-### 垃圾消息检测配置
-
-在 `config.py` 中可以调整以下参数：
-
-```python
-SPAM_DETECTION = {
-    'max_links_per_message': 3,  # 单条消息最大链接数
-    'max_caps_percentage': 70,   # 大写字母最大百分比
-    'min_message_length': 5,     # 最小消息长度
-    'max_repetitive_chars': 5,   # 最大重复字符数
-    'forbidden_words': [         # 禁止词汇列表
-        'spam', 'scam', 'hack', 'free money', 'earn money fast'
-    ]
-}
-```
 
 ### 删除配置
 

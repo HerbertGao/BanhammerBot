@@ -44,6 +44,7 @@ class Config:
     # 黑名单配置
     BLACKLIST_CONFIG = {
         'auto_ban_on_blacklist': True,  # 在黑名单中自动封禁
+        'auto_ban_on_spam': True,       # 对垃圾消息自动封禁
         'ban_duration': 0,              # 封禁时长(0为永久封禁)
         'log_actions': True,            # 记录操作到频道
     }
