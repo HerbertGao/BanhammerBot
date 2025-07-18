@@ -190,17 +190,12 @@ BanhammerBot/
 │   └── models.py        # 数据库模型
 └── handlers/            # 处理器模块
     ├── __init__.py
-    ├── spam_detector.py # 垃圾消息检测器
     ├── blacklist_handler.py # 黑名单处理器
     ├── admin_handler.py # 管理员处理器
     └── message_handler.py # 消息处理器
 ```
 
 ## 开发说明
-
-### 添加新的检测规则
-
-在 `handlers/spam_detector.py` 中的 `SpamDetector` 类中添加新的检测方法。
 
 ### 自定义黑名单类型
 

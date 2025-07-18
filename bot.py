@@ -7,7 +7,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from config import Config
 from database.models import DatabaseManager
 from handlers.blacklist_handler import BlacklistHandler
-from handlers.spam_detector import SpamDetector
+from handlers.admin_handler import AdminHandler
 from utils.logger import logger
 
 
@@ -130,7 +130,6 @@ class BanhammerBot:
                 "🤖 <b>Banhammer Bot</b>\n\n"
                 "欢迎使用群组垃圾消息清理机器人！\n\n"
                 "🔧 <b>主要功能:</b>\n"
-                "• 自动检测并删除垃圾消息\n"
                 "• 黑名单管理（链接、贴纸、GIF、Bot、文字）\n"
                 "• 文字消息举报计数（3次自动加入黑名单）\n"
                 "• 自动封禁违规用户\n"
@@ -179,11 +178,8 @@ class BanhammerBot:
             "• 不同群组可以使用相同的记录频道\n"
             "• 记录包含来源群组信息\n"
             "• 未设置时不会记录到频道\n\n"
-            "⚡ <b>自动检测:</b>\n"
-            "• 垃圾链接\n"
-            "• 禁止词汇\n"
-            "• 大写比例过高\n"
-            "• 重复字符\n"
+            "⚡ <b>黑名单检测:</b>\n"
+            "• 黑名单链接\n"
             "• 黑名单贴纸（精确到单个贴纸）\n"
             "• 黑名单GIF\n"
             "• 黑名单内联Bot\n"
@@ -198,8 +194,13 @@ class BanhammerBot:
             "• 操作记录到指定频道\n\n"
             "🆕 <b>贴纸识别升级:</b>\n"
             "• 使用file_unique_id精确识别单个贴纸\n"
-            "• 比set_name更可靠，不会出现空值问题\n"
-            "• 支持所有类型的贴纸（包括单个贴纸）"
+            "• 支持跨群组共享贴纸黑名单\n"
+            "• 自动迁移旧版贴纸数据\n\n"
+            "📱 <b>私聊转发功能:</b>\n"
+            "• 转发消息给Bot可直接添加黑名单\n"
+            "• 支持所有消息类型\n"
+            "• 自动添加到所有贡献群组\n"
+            "• 自动添加到通用黑名单"
         )
 
         await context.bot.send_message(
@@ -249,6 +250,11 @@ class BanhammerBot:
         if not message:
             return
 
+        # 检查用户权限 - 管理员和群主的消息跳过检测
+        if await self._is_admin_or_creator(message):
+            logger.info(f"管理员消息，跳过检测: {message.from_user.username}")
+            return
+
         # 创建黑名单处理器实例
         blacklist_handler = BlacklistHandler()
 
@@ -256,60 +262,10 @@ class BanhammerBot:
         if await blacklist_handler.check_blacklist(message, context):
             return
 
-        # 检查垃圾消息
-        spam_detector = SpamDetector()
-        if spam_detector.detect_spam(message)[0]:
-            await self._handle_spam_message(message, context)
-
-    async def _handle_spam_message(self, message: Message, context: ContextTypes.DEFAULT_TYPE):
-        """处理垃圾消息"""
-        user = message.from_user
-        chat = message.chat
-
-        logger.warning(f"检测到垃圾消息 - 用户: {user.username}, 群组: {chat.title}")
-
-        # 删除消息
-        try:
-            await message.delete()
-            logger.info(f"已删除垃圾消息: {message.message_id}")
-        except Exception as e:
-            logger.error(f"删除垃圾消息失败: {e}")
-
-        # 封禁用户
-        if Config.BLACKLIST_CONFIG['auto_ban_on_spam']:
-            try:
-                await context.bot.ban_chat_member(
-                    chat_id=chat.id,
-                    user_id=user.id,
-                    until_date=Config.BLACKLIST_CONFIG['ban_duration'] if Config.BLACKLIST_CONFIG[
-                                                                              'ban_duration'] > 0 else None
-                )
-
-                # 记录封禁
-                ban_id = self.db.add_ban_record(
-                    chat_id=chat.id,
-                    user_id=user.id,
-                    reason="发送垃圾消息",
-                    banned_by=context.bot.id
-                )
-
-                # 记录操作
-                self.db.add_action_log(
-                    chat_id=chat.id,
-                    action_type='ban',
-                    user_id=user.id,
-                    target_content="垃圾消息",
-                    reason="自动检测为垃圾消息"
-                )
-
-                logger.info(f"已封禁垃圾消息发送者: {user.username} (ID: {user.id})")
-
-                # 记录到频道
-                if Config.BLACKLIST_CONFIG['log_actions']:
-                    await self._log_to_channel(context, chat, user, 'ban', "垃圾消息", "自动检测为垃圾消息")
-
-            except Exception as e:
-                logger.error(f"封禁垃圾消息发送者失败: {e}")
+        # 检查 @admin 呼叫（仅文本消息）
+        if message.text:
+            admin_handler = AdminHandler()
+            await admin_handler.handle_admin_call(update, context)
 
     async def _log_to_channel(self, context: ContextTypes.DEFAULT_TYPE, chat, user, action_type: str,
                               content: str, reason: str):
@@ -400,6 +356,15 @@ class BanhammerBot:
             text=help_text,
             parse_mode=ParseMode.HTML
         )
+
+    async def _is_admin_or_creator(self, message: Message) -> bool:
+        """检查用户是否为管理员或群主"""
+        try:
+            chat_member = await message.chat.get_member(message.from_user.id)
+            return chat_member.status in ['administrator', 'creator']
+        except Exception as e:
+            logger.error(f"检查用户权限失败: {e}")
+            return False
 
 
 def main():

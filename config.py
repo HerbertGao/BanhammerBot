@@ -16,17 +16,6 @@ class Config:
     # 数据库配置
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///banhammer_bot.db')
     
-    # 垃圾消息检测配置
-    SPAM_DETECTION = {
-        'max_links_per_message': 3,  # 单条消息最大链接数
-        'max_caps_percentage': 70,   # 大写字母最大百分比
-        'min_message_length': 5,     # 最小消息长度
-        'max_repetitive_chars': 5,   # 最大重复字符数
-        'forbidden_words': [         # 禁止词汇列表
-            'spam', 'scam', 'hack', 'free money', 'earn money fast'
-        ]
-    }
-    
     # 删除消息配置
     DELETE_CONFIG = {
         'auto_delete_spam': True,    # 自动删除垃圾消息
@@ -44,7 +33,6 @@ class Config:
     # 黑名单配置
     BLACKLIST_CONFIG = {
         'auto_ban_on_blacklist': True,  # 在黑名单中自动封禁
-        'auto_ban_on_spam': True,       # 对垃圾消息自动封禁
         'ban_duration': 0,              # 封禁时长(0为永久封禁)
         'log_actions': True,            # 记录操作到频道
     }
