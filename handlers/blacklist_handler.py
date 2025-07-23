@@ -143,6 +143,17 @@ class BlacklistHandler:
     
     def _extract_blacklist_content(self, message: Message) -> Tuple[Optional[str], Optional[str]]:
         """提取黑名单内容"""
+        # 检查内联Bot（优先级最高，因为代表消息来源）
+        if message.via_bot:
+            bot_id = message.via_bot.id
+            logger.debug(f"检测到内联Bot: {message.via_bot}, id: {bot_id}")
+            # 只有当id存在时才返回bot类型
+            if bot_id:
+                logger.info(f"提取到内联Bot黑名单内容: {bot_id}")
+                return 'bot', str(bot_id)  # 转换为字符串以保持一致性
+            else:
+                logger.warning(f"内联Bot存在但id为空: {message.via_bot}")
+        
         # 检查链接
         if message.text and self._is_only_link(message.text):
             return 'link', self._extract_link(message.text)
@@ -157,10 +168,6 @@ class BlacklistHandler:
         # 检查GIF动画
         if message.animation:
             return 'gif', message.animation.file_id
-        
-        # 检查内联Bot
-        if message.via_bot:
-            return 'bot', message.via_bot.username
         
         # 检查普通文字消息
         if message.text and not self._is_only_link(message.text):
@@ -376,9 +383,9 @@ class BlacklistHandler:
         
         # 检查内联Bot
         if message.via_bot:
-            bot_username = message.via_bot.username
-            if bot_username and self.db.check_blacklist(message.chat.id, 'bot', bot_username):
-                await self._handle_blacklist_violation(message, context, 'bot', bot_username, 'group')
+            bot_id = str(message.via_bot.id)  # 转换为字符串以保持一致性
+            if bot_id and self.db.check_blacklist(message.chat.id, 'bot', bot_id):
+                await self._handle_blacklist_violation(message, context, 'bot', bot_id, 'group')
                 return True
         
         # 检查文字消息
@@ -418,10 +425,10 @@ class BlacklistHandler:
         
         # 检查内联Bot
         if message.via_bot:
-            bot_username = message.via_bot.username
-            if bot_username and self.db.check_global_blacklist('bot', bot_username):
-                self.db.increment_global_blacklist_usage('bot', bot_username)
-                await self._handle_blacklist_violation(message, context, 'bot', bot_username, 'global')
+            bot_id = str(message.via_bot.id)  # 转换为字符串以保持一致性
+            if bot_id and self.db.check_global_blacklist('bot', bot_id):
+                self.db.increment_global_blacklist_usage('bot', bot_id)
+                await self._handle_blacklist_violation(message, context, 'bot', bot_id, 'global')
                 return True
         
         # 检查文字消息
