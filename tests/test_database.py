@@ -1,5 +1,8 @@
 """数据库模型测试"""
 
+import sqlite3
+from unittest.mock import patch
+
 import pytest
 
 from database.models import DatabaseManager
@@ -280,3 +283,41 @@ class TestDatabaseManager:
         settings = self.db.get_group_settings(sample_chat_id)
         assert settings["contribute_to_global"] is True
         assert settings["use_global_blacklist"] is True
+
+    def test_add_to_blacklist_operational_error(self, sample_chat_id):
+        """测试添加黑名单时的OperationalError处理"""
+        # 模拟数据库操作错误
+        with patch("sqlite3.connect") as mock_connect:
+            mock_connect.side_effect = sqlite3.OperationalError("database is locked")
+
+            # 尝试添加黑名单应该返回False而不是抛出异常
+            result = self.db.add_to_blacklist(
+                chat_id=sample_chat_id, blacklist_type="link", content="https://test.com", created_by=999
+            )
+            assert result is False
+
+    def test_add_to_global_blacklist_database_error(self):
+        """测试添加全局黑名单时的DatabaseError处理"""
+        # 模拟数据库错误
+        with patch("sqlite3.connect") as mock_connect:
+            mock_connect.side_effect = sqlite3.DatabaseError("database error")
+
+            # 尝试添加全局黑名单应该返回False而不是抛出异常
+            result = self.db.add_to_global_blacklist(
+                blacklist_type="link", content="https://test.com", contributed_by=-1001234567890
+            )
+            assert result is False
+
+    def test_increment_text_report_integrity_error(self, sample_chat_id, sample_user_id):
+        """测试增加举报计数时的IntegrityError处理"""
+        # 模拟完整性约束错误
+        with patch("sqlite3.connect") as mock_connect:
+            mock_connect.side_effect = sqlite3.IntegrityError("UNIQUE constraint failed")
+
+            # 尝试增加举报计数应该返回默认值而不是抛出异常
+            result = self.db.increment_text_report_count(
+                chat_id=sample_chat_id, user_id=sample_user_id, message_hash="test_hash"
+            )
+            assert result["report_count"] == 0
+            assert result["is_blacklisted"] is False
+            assert result["should_add_to_blacklist"] is False

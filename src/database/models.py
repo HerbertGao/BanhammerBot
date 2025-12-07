@@ -195,7 +195,7 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO group_blacklists 
+                    INSERT OR REPLACE INTO group_blacklists
                     (chat_id, blacklist_type, blacklist_content, created_by)
                     VALUES (?, ?, ?, ?)
                 """,
@@ -204,8 +204,17 @@ class DatabaseManager:
                 conn.commit()
                 logger.info(f"已添加黑名单项: {chat_id} - {blacklist_type} - {content}")
                 return True
+        except sqlite3.IntegrityError as e:
+            logger.warning(f"黑名单项已存在或违反完整性约束: {chat_id} - {blacklist_type} - {content} | {e}")
+            return False
+        except sqlite3.OperationalError as e:
+            logger.error(f"数据库操作错误（可能被锁定或表不存在）: {e}", exc_info=True)
+            return False
+        except sqlite3.DatabaseError as e:
+            logger.error(f"数据库错误: {e}", exc_info=True)
+            return False
         except Exception as e:
-            logger.error(f"添加黑名单失败: {e}")
+            logger.error(f"添加黑名单失败（未知错误）: {e}", exc_info=True)
             return False
 
     def add_to_global_blacklist(
@@ -217,7 +226,7 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO global_blacklists 
+                    INSERT OR REPLACE INTO global_blacklists
                     (blacklist_type, blacklist_content, contributed_by)
                     VALUES (?, ?, ?)
                 """,
@@ -226,8 +235,17 @@ class DatabaseManager:
                 conn.commit()
                 logger.info(f"已添加通用黑名单项: {blacklist_type} - {content}")
                 return True
+        except sqlite3.IntegrityError as e:
+            logger.warning(f"通用黑名单项已存在或违反完整性约束: {blacklist_type} - {content} | {e}")
+            return False
+        except sqlite3.OperationalError as e:
+            logger.error(f"数据库操作错误（可能被锁定或表不存在）: {e}", exc_info=True)
+            return False
+        except sqlite3.DatabaseError as e:
+            logger.error(f"数据库错误: {e}", exc_info=True)
+            return False
         except Exception as e:
-            logger.error(f"添加通用黑名单失败: {e}")
+            logger.error(f"添加通用黑名单失败（未知错误）: {e}", exc_info=True)
             return False
 
     def check_global_blacklist(self, blacklist_type: str, content: str) -> bool:
@@ -706,11 +724,28 @@ class DatabaseManager:
                             "is_blacklisted": False,
                             "should_add_to_blacklist": False,
                         }
+                except sqlite3.IntegrityError as e:
+                    conn.rollback()
+                    logger.warning(f"违反唯一性约束: chat_id={chat_id}, user_id={user_id} | {e}")
+                    raise
+                except sqlite3.OperationalError as e:
+                    conn.rollback()
+                    logger.error(f"数据库操作错误（可能被锁定）: {e}", exc_info=True)
+                    raise
                 except Exception:
                     conn.rollback()
                     raise
+        except sqlite3.IntegrityError as e:
+            logger.warning(f"增加文字消息举报计数失败（完整性约束）: {e}")
+            return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}
+        except sqlite3.OperationalError as e:
+            logger.error(f"增加文字消息举报计数失败（操作错误）: {e}", exc_info=True)
+            return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}
+        except sqlite3.DatabaseError as e:
+            logger.error(f"增加文字消息举报计数失败（数据库错误）: {e}", exc_info=True)
+            return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}
         except Exception as e:
-            logger.error(f"增加文字消息举报计数失败: {e}")
+            logger.error(f"增加文字消息举报计数失败（未知错误）: {e}", exc_info=True)
             return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}
 
     def get_text_report_info(
