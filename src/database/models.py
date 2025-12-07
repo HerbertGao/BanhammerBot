@@ -4,6 +4,9 @@ from typing import Dict, List, Optional
 from config import Config
 from utils.logger import logger
 
+# 哨兵值，用于区分"未提供参数"和"提供了None"
+_UNSET = object()
+
 
 class DatabaseManager:
     """数据库管理器"""
@@ -246,9 +249,9 @@ class DatabaseManager:
     def update_group_settings(
         self,
         chat_id: int,
-        contribute_to_global: bool = None,
-        use_global_blacklist: bool = None,
-        log_channel_id: int = None,
+        contribute_to_global: bool = _UNSET,
+        use_global_blacklist: bool = _UNSET,
+        log_channel_id: Optional[int] = _UNSET,
     ) -> bool:
         """更新群组设置"""
         try:
@@ -261,17 +264,17 @@ class DatabaseManager:
                 # 更新设置
                 new_contribute = (
                     contribute_to_global
-                    if contribute_to_global is not None
+                    if contribute_to_global is not _UNSET
                     else current_settings["contribute_to_global"]
                 )
                 new_use_global = (
                     use_global_blacklist
-                    if use_global_blacklist is not None
+                    if use_global_blacklist is not _UNSET
                     else current_settings["use_global_blacklist"]
                 )
                 new_log_channel = (
                     log_channel_id
-                    if log_channel_id is not None
+                    if log_channel_id is not _UNSET
                     else current_settings["log_channel_id"]
                 )
 
@@ -302,8 +305,8 @@ class DatabaseManager:
             logger.error(f"获取群组记录频道失败: {e}")
             return None
 
-    def set_group_log_channel(self, chat_id: int, log_channel_id: int) -> bool:
-        """设置群组的记录频道ID"""
+    def set_group_log_channel(self, chat_id: int, log_channel_id: Optional[int]) -> bool:
+        """设置群组的记录频道ID（传入None表示清除设置）"""
         try:
             return self.update_group_settings(chat_id, log_channel_id=log_channel_id)
         except Exception as e:
