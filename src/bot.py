@@ -28,15 +28,17 @@ class BanhammerBot:
             raise ValueError("BOT_TOKEN 未设置，请在 .env 文件中配置")
 
         # 初始化数据库，捕获并记录错误
+        self.db = None
         try:
             self.db = DatabaseManager()
             logger.info("数据库初始化成功")
-        except Exception as e:
-            logger.error(f"数据库初始化失败: {e}", exc_info=True)
-            raise RuntimeError(f"无法初始化数据库: {e}") from e
 
-        # 初始化黑名单处理器 - 共享数据库连接
-        self.blacklist_handler = BlacklistHandler(db=self.db)
+            # 初始化黑名单处理器 - 共享数据库连接
+            self.blacklist_handler = BlacklistHandler(db=self.db)
+        except Exception as e:
+            # 注意：DatabaseManager不维护持久连接，无需显式关闭
+            logger.error(f"Bot初始化失败: {e}", exc_info=True)
+            raise RuntimeError(f"无法初始化Bot: {e}") from e
 
     def start(self):
         """启动 Bot"""
@@ -73,18 +75,19 @@ class BanhammerBot:
         import asyncio
 
         try:
-            # 使用 asyncio.run() 执行异步清理操作
-            asyncio.run(self._async_stop())
+            # 检查是否已有运行中的事件循环
+            try:
+                loop = asyncio.get_running_loop()
+                # 如果已有运行中的事件循环，创建任务
+                logger.debug("检测到运行中的事件循环，使用 ensure_future")
+                asyncio.ensure_future(self._async_stop())
+            except RuntimeError:
+                # 没有运行中的事件循环，使用 asyncio.run()
+                logger.debug("没有运行中的事件循环，使用 asyncio.run()")
+                asyncio.run(self._async_stop())
         except Exception as e:
             logger.error(f"停止 Bot 时出错: {e}", exc_info=True)
-        finally:
-            # 清理数据库连接
-            if self.db:
-                try:
-                    self.db.close()
-                    logger.debug("数据库连接已关闭")
-                except Exception as e:
-                    logger.error(f"关闭数据库时出错: {e}", exc_info=True)
+        # 注意：DatabaseManager不维护持久连接，无需显式关闭
 
     async def _async_stop(self):
         """异步停止 Bot（内部方法）"""

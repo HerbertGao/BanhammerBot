@@ -41,12 +41,31 @@ class Config:
         "text_spam_threshold": 3,  # 文本消息被举报多少次后自动加入黑名单
     }
 
+    @staticmethod
+    def _parse_admin_user_ids():
+        """解析管理员用户ID列表，提供清晰的错误消息"""
+        admin_ids_str = os.getenv("ADMIN_USER_IDS", "")
+        if not admin_ids_str.strip():
+            return []
+
+        admin_ids = []
+        for uid in admin_ids_str.split(","):
+            uid = uid.strip()
+            if not uid:
+                continue
+            try:
+                admin_ids.append(int(uid))
+            except ValueError as e:
+                raise ValueError(
+                    f"环境变量 ADMIN_USER_IDS 包含无效的用户ID: '{uid}'. "
+                    f"请确保所有ID都是数字，使用逗号分隔。示例: ADMIN_USER_IDS=123456,789012"
+                ) from e
+        return admin_ids
+
     # 私聊转发配置
     PRIVATE_FORWARD_CONFIG = {
         "enabled": True,  # 是否启用私聊转发功能
-        "admin_user_ids": [
-            int(uid.strip()) for uid in os.getenv("ADMIN_USER_IDS", "").split(",") if uid.strip()
-        ],
+        "admin_user_ids": _parse_admin_user_ids.__func__(),  # 使用静态方法解析
         "auto_add_to_contributing_groups": True,  # 自动添加到所有贡献群组
         "auto_add_to_global": True,  # 自动添加到通用黑名单
     }

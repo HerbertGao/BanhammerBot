@@ -54,31 +54,18 @@ class DatabaseManager:
     """数据库管理器"""
 
     def __init__(self, db_path: str = "banhammer_bot.db"):
+        """初始化数据库管理器
+
+        注意：此类使用 sqlite3.connect() context manager 管理每次连接，
+        每个数据库操作都创建并自动关闭连接，不维护持久连接。
+        因此不需要 close() 方法或 __enter__/__exit__ 方法。
+        """
         self.db_path = db_path
         # 避免循环导入，在初始化时延迟导入Config
         from config import Config
 
         self.text_spam_threshold = Config.BLACKLIST_CONFIG.get("text_spam_threshold", 3)
         self.init_database()
-
-    def __enter__(self):
-        """Context manager 入口"""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager 出口"""
-        self.close()
-        return False
-
-    def close(self):
-        """关闭数据库连接并清理资源
-
-        注意：当前实现使用 context manager 管理连接，不需要持久连接。
-        此方法为未来扩展预留，并提供显式清理接口。
-        """
-        # 当前不需要清理，因为所有连接都通过 with 语句管理
-        # 未来如果添加连接池或持久连接，可以在此处理
-        logger.debug(f"数据库管理器已关闭: {self.db_path}")
 
     def init_database(self):
         """初始化数据库表"""
