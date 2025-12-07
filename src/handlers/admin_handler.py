@@ -71,7 +71,7 @@ class AdminHandler:
         """发送管理员列表"""
         try:
             # 构建管理员列表消息
-            admin_text = "👥 **群组管理员**\n\n"
+            admin_text = "👥 <b>群组管理员</b>\n\n"
 
             for i, admin in enumerate(admins, 1):
                 # 获取用户显示名称
