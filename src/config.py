@@ -1,9 +1,46 @@
 import os
+import re
 
 from dotenv import load_dotenv
 
 # 加载环境变量
 load_dotenv()
+
+
+def _validate_bot_token(token: str | None) -> list[str]:
+    """验证 Bot Token 格式
+
+    Args:
+        token: Bot Token 字符串
+
+    Returns:
+        list[str]: 验证错误列表（空列表表示验证通过）
+    """
+    errors = []
+
+    if not token:
+        errors.append("环境变量 BOT_TOKEN 未设置")
+        return errors
+
+    # Telegram Bot Token 格式: <bot_id>:<hash>
+    # 示例: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz-1234567890
+    token_pattern = r"^\d+:[A-Za-z0-9_-]{35,}$"
+
+    if not re.match(token_pattern, token):
+        errors.append(
+            f"BOT_TOKEN 格式无效。正确格式: <bot_id>:<hash> "
+            f"(示例: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz-1234567890)"
+        )
+        return errors
+
+    # 检查长度
+    if len(token) < 45:
+        errors.append(
+            f"BOT_TOKEN 长度可疑 ({len(token)} 字符)，"
+            f"正常的 Telegram Bot Token 应该至少 45 字符"
+        )
+
+    return errors
 
 
 def _parse_admin_user_ids():
@@ -106,3 +143,57 @@ class Config:
             "retention_seconds": 3600,  # 保留记录的时间窗口（秒），默认1小时
         },
     }
+
+
+def validate_config() -> tuple[bool, list[str]]:
+    """验证配置完整性
+
+    检查所有必需的环境变量是否正确设置
+
+    Returns:
+        tuple[bool, list[str]]: (验证是否通过, 错误/警告消息列表)
+    """
+    errors = []
+    warnings = []
+
+    # 验证 BOT_TOKEN（必需）
+    token_errors = _validate_bot_token(Config.BOT_TOKEN)
+    errors.extend(token_errors)
+
+    # 验证 LOG_LEVEL（可选，但检查有效性）
+    valid_log_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if Config.LOG_LEVEL.upper() not in valid_log_levels:
+        warnings.append(
+            f"LOG_LEVEL 值 '{Config.LOG_LEVEL}' 可能无效。" f"有效值: {', '.join(valid_log_levels)}"
+        )
+
+    # 验证 DATABASE_URL 格式（可选，但检查基本格式）
+    if Config.DATABASE_URL and not (
+        Config.DATABASE_URL.startswith("sqlite:")
+        or Config.DATABASE_URL.startswith("postgresql:")
+        or Config.DATABASE_URL.startswith("mysql:")
+    ):
+        warnings.append(
+            f"DATABASE_URL 格式可能无效: {Config.DATABASE_URL}。"
+            f"应以 sqlite:, postgresql:, 或 mysql: 开头"
+        )
+
+    # 验证 ADMIN_USER_IDS（可选，如果启用私聊转发功能则建议设置）
+    if Config.PRIVATE_FORWARD_CONFIG.get("enabled") and not Config.PRIVATE_FORWARD_CONFIG.get(
+        "admin_user_ids"
+    ):
+        warnings.append(
+            "私聊转发功能已启用，但 ADMIN_USER_IDS 未设置。" "建议设置管理员ID以接收转发消息"
+        )
+
+    # 合并错误和警告
+    all_messages = []
+    if errors:
+        all_messages.extend([f"❌ 错误: {err}" for err in errors])
+    if warnings:
+        all_messages.extend([f"⚠️  警告: {warn}" for warn in warnings])
+
+    # 如果有错误则验证失败，仅有警告则通过
+    is_valid = len(errors) == 0
+
+    return is_valid, all_messages

@@ -447,6 +447,23 @@ class BanhammerBot:
 
 
 def main():
+    # 验证配置
+    from config import validate_config
+
+    is_valid, messages = validate_config()
+
+    # 打印所有验证消息
+    for msg in messages:
+        if msg.startswith("❌"):
+            logger.error(msg)
+        elif msg.startswith("⚠️"):
+            logger.warning(msg)
+
+    # 如果配置无效，退出程序
+    if not is_valid:
+        logger.error("配置验证失败，程序无法启动。请检查环境变量设置。")
+        raise SystemExit(1)
+
     try:
         bot = BanhammerBot()
         bot.start()
