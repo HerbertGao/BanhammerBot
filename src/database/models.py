@@ -478,8 +478,8 @@ class DatabaseManager:
         user_id: int,
         target_content: str = None,
         reason: str = None,
-    ) -> bool:
-        """添加操作日志"""
+    ) -> int:
+        """添加操作日志，返回日志ID"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -491,10 +491,12 @@ class DatabaseManager:
                     (chat_id, action_type, user_id, target_content, reason),
                 )
                 conn.commit()
-                return True
+                log_id = cursor.lastrowid
+                logger.info(f"已添加操作日志: {log_id} - {action_type} - {user_id}")
+                return log_id
         except Exception as e:
             logger.error(f"添加操作日志失败: {e}")
-            return False
+            return 0
 
     def get_action_logs(self, chat_id: int, limit: int = 50) -> List[Dict]:
         """获取操作日志"""
