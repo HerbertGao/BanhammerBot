@@ -1454,9 +1454,15 @@ class BlacklistHandler:
             )
 
     async def _ensure_task_limit(self):
-        """确保后台任务数不超过限制
+        """确保后台任务数不超过限制（优化版）
 
-        在添加新任务前调用，如果达到限制则等待旧任务完成
+        在添加新任务前调用，如果达到限制则等待任务完成。
+        使用优化策略：等待任意任务完成，直接移除已完成任务，避免重复遍历。
+
+        优化原理：
+        - 不等待特定任务（如最旧任务），避免被卡住的任务阻塞
+        - 直接移除已知完成的任务，而不是再次遍历整个列表
+        - 提高并发场景下的效率和健壮性
         """
         # 先清理已完成的任务
         self._cleanup_completed_tasks()
@@ -1465,15 +1471,24 @@ class BlacklistHandler:
         while len(self.background_tasks) >= self.MAX_BACKGROUND_TASKS:
             logger.warning(
                 f"后台任务数达到限制 {len(self.background_tasks)}/{self.MAX_BACKGROUND_TASKS}，"
-                f"等待任务完成..."
+                f"等待任意任务完成..."
             )
-            # 等待至少一个任务完成
+            # 等待任意一个任务完成（而非特定任务，避免被卡住）
             if self.background_tasks:
-                done, pending = await asyncio.wait(
+                done, _ = await asyncio.wait(
                     self.background_tasks, return_when=asyncio.FIRST_COMPLETED
                 )
-                # 再次清理
-                self._cleanup_completed_tasks()
+                # 直接移除已完成的任务（优化：避免再次遍历整个列表）
+                for task in done:
+                    try:
+                        self.background_tasks.remove(task)
+                    except ValueError:
+                        # 任务可能已被其他地方移除，忽略
+                        pass
+
+                logger.debug(
+                    f"已完成 {len(done)} 个后台任务，" f"剩余 {len(self.background_tasks)} 个"
+                )
             else:
                 # 不应该到这里，但以防万一
                 break
