@@ -254,3 +254,39 @@ class TestBlacklistCheck:
         # 验证被检测到
         assert result is True
         message.delete.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_check_blacklist_none_from_user(self, sample_chat_id):
+        """测试消息发送者为None的情况（频道消息）"""
+        # 添加链接到黑名单
+        link = "https://spam.com"
+        self.handler.db.add_to_blacklist(
+            chat_id=sample_chat_id, blacklist_type="link", content=link, created_by=999
+        )
+
+        # 创建来自频道的消息（from_user为None）
+        message = MagicMock(spec=Message)
+        message.text = link
+        message.via_bot = None
+        message.sticker = None
+        message.animation = None
+        message.chat = MagicMock(spec=Chat)
+        message.chat.id = sample_chat_id
+        message.from_user = None  # 模拟频道消息
+        message.message_id = 456
+        message.delete = AsyncMock()
+
+        context = MagicMock()
+        context.bot.ban_chat_member = AsyncMock()
+        context.bot.send_message = AsyncMock()
+        context.bot.id = 987654321
+
+        # 检查黑名单
+        result = await self.handler.check_blacklist(message, context)
+
+        # 验证被检测到并删除消息
+        assert result is True
+        message.delete.assert_called_once()
+
+        # 验证没有调用封禁（因为from_user为None）
+        context.bot.ban_chat_member.assert_not_called()

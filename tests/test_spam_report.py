@@ -256,3 +256,57 @@ class TestSpamReport:
 
         # 验证没有发送任何消息
         context.bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_spam_report_none_from_user(self):
+        """测试message.from_user为None的情况（频道消息）"""
+        update = MagicMock(spec=Update)
+        message = MagicMock(spec=Message)
+        message.from_user = None  # 模拟频道消息
+        message.chat.id = -1001234567890
+        update.message = message
+
+        context = MagicMock()
+        context.bot.send_message = AsyncMock()
+
+        # 应该正常返回，不抛出异常
+        await self.handler.handle_spam_report(update, context)
+
+        # 验证没有发送任何消息
+        context.bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_spam_report_target_none_from_user(self):
+        """测试target_message.from_user为None的情况（频道消息）"""
+        update = MagicMock(spec=Update)
+        target_message = MagicMock(spec=Message)
+        target_message.from_user = None  # 目标消息来自频道
+        target_message.text = "https://spam.com"
+        target_message.via_bot = None
+        target_message.sticker = None
+        target_message.animation = None
+        target_message.message_id = 999
+        target_message.delete = AsyncMock()
+
+        message = MagicMock(spec=Message)
+        message.from_user = User(id=123456, first_name="Admin", is_bot=False)
+        message.chat.id = -1001234567890
+        message.reply_to_message = target_message
+        message.message_id = 1000
+        message.delete = AsyncMock()
+
+        update.message = message
+
+        with patch.object(self.handler, "_is_admin_or_creator", return_value=True):
+            context = MagicMock()
+            context.bot.send_message = AsyncMock(return_value=MagicMock())
+            context.bot.ban_chat_member = AsyncMock()
+
+            # 应该正常返回，添加到黑名单但不封禁
+            await self.handler.handle_spam_report(update, context)
+
+            # 验证已删除消息
+            target_message.delete.assert_called_once()
+
+            # 验证没有调用封禁（因为from_user为None）
+            context.bot.ban_chat_member.assert_not_called()

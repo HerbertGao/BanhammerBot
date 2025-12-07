@@ -33,6 +33,11 @@ class BlacklistHandler:
         if not message:
             return
 
+        # 检查消息发送者是否存在（频道消息的from_user为None）
+        if not message.from_user:
+            logger.warning("跳过处理：消息发送者为空（可能是频道消息）")
+            return
+
         if not message.reply_to_message:
             await self._send_error_message(message, context, "请回复要举报的消息")
             return
@@ -101,37 +106,40 @@ class BlacklistHandler:
             except Exception as e:
                 logger.error(f"删除被举报消息失败: {e}")
 
-            # 封禁发送者
-            try:
-                await context.bot.ban_chat_member(
-                    chat_id=message.chat.id,
-                    user_id=target_message.from_user.id,
-                    until_date=(
-                        Config.BLACKLIST_CONFIG["ban_duration"]
-                        if Config.BLACKLIST_CONFIG["ban_duration"] > 0
-                        else None
-                    ),
-                )
+            # 封禁发送者（检查target_message.from_user是否存在）
+            if target_message.from_user:
+                try:
+                    await context.bot.ban_chat_member(
+                        chat_id=message.chat.id,
+                        user_id=target_message.from_user.id,
+                        until_date=(
+                            Config.BLACKLIST_CONFIG["ban_duration"]
+                            if Config.BLACKLIST_CONFIG["ban_duration"] > 0
+                            else None
+                        ),
+                    )
 
-                # 记录封禁
-                ban_id = self.db.add_ban_record(
-                    chat_id=message.chat.id,
-                    user_id=target_message.from_user.id,
-                    reason=f"发送垃圾内容被举报 - 类型: {blacklist_type}",
-                    banned_by=message.from_user.id,
-                )
+                    # 记录封禁
+                    ban_id = self.db.add_ban_record(
+                        chat_id=message.chat.id,
+                        user_id=target_message.from_user.id,
+                        reason=f"发送垃圾内容被举报 - 类型: {blacklist_type}",
+                        banned_by=message.from_user.id,
+                    )
 
-                logger.info(
-                    f"[SPAM_REPORT] 已封禁发送者 | "
-                    f"user_id={target_message.from_user.id} "
-                    f"username={target_message.from_user.username} "
-                    f"chat_id={message.chat.id} "
-                    f"blacklist_type={blacklist_type} "
-                    f"reporter_id={message.from_user.id}"
-                )
+                    logger.info(
+                        f"[SPAM_REPORT] 已封禁发送者 | "
+                        f"user_id={target_message.from_user.id} "
+                        f"username={target_message.from_user.username} "
+                        f"chat_id={message.chat.id} "
+                        f"blacklist_type={blacklist_type} "
+                        f"reporter_id={message.from_user.id}"
+                    )
 
-            except Exception as e:
-                logger.error(f"封禁发送者失败: {e}")
+                except Exception as e:
+                    logger.error(f"封禁发送者失败: {e}")
+            else:
+                logger.warning(f"无法封禁发送者：消息发送者为空（可能是频道消息）")
 
             # 记录操作
             self.db.add_action_log(
@@ -256,6 +264,12 @@ class BlacklistHandler:
         group_settings: Dict,
     ):
         """处理文字消息的举报"""
+        # 检查目标消息发送者是否存在
+        if not target_message.from_user:
+            logger.warning("跳过处理文字消息举报：目标消息发送者为空（可能是频道消息）")
+            await self._send_error_message(message, context, "无法举报此消息：发送者信息不可用")
+            return
+
         # 增加举报计数
         report_info = self.db.increment_text_report_count(
             chat_id=message.chat.id, user_id=target_message.from_user.id, message_hash=message_hash
@@ -497,6 +511,17 @@ class BlacklistHandler:
         source: str = "group",
     ):
         """处理黑名单违规"""
+        # 检查消息发送者是否存在（频道消息的from_user为None）
+        if not message.from_user:
+            logger.warning("跳过黑名单违规处理：消息发送者为空（可能是频道消息）")
+            # 仍然删除违规消息，即使无法封禁发送者
+            try:
+                await message.delete()
+                logger.info(f"已删除违规消息: {message.message_id}")
+            except Exception as e:
+                logger.error(f"删除消息失败: {e}")
+            return
+
         user = message.from_user
         chat = message.chat
 

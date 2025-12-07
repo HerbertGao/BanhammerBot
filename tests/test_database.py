@@ -321,3 +321,53 @@ class TestDatabaseManager:
             assert result["report_count"] == 0
             assert result["is_blacklisted"] is False
             assert result["should_add_to_blacklist"] is False
+
+    def test_remove_from_blacklist(self, sample_chat_id):
+        """测试从黑名单移除"""
+        # 先添加一个黑名单项
+        self.db.add_to_blacklist(
+            chat_id=sample_chat_id, blacklist_type="link", content="https://spam.com", created_by=999
+        )
+
+        # 验证已添加
+        assert self.db.check_blacklist(sample_chat_id, "link", "https://spam.com") is True
+
+        # 移除
+        result = self.db.remove_from_blacklist(sample_chat_id, "link", "https://spam.com")
+        assert result is True
+
+        # 验证已移除
+        assert self.db.check_blacklist(sample_chat_id, "link", "https://spam.com") is False
+
+    def test_cleanup_invalid_blacklist_items(self):
+        """测试清理无效黑名单项"""
+        # 执行清理（扫描所有群组的黑名单）
+        result = self.db.cleanup_invalid_blacklist_items()
+        assert isinstance(result, dict)
+        assert "group_blacklist" in result
+        assert "global_blacklist" in result
+        assert isinstance(result["group_blacklist"], int)
+        assert isinstance(result["global_blacklist"], int)
+
+    def test_set_group_log_channel(self, sample_chat_id):
+        """测试设置群组日志频道"""
+        channel_id = -1001111111111
+
+        # 设置日志频道
+        result = self.db.set_group_log_channel(sample_chat_id, channel_id)
+        assert result is True
+
+        # 验证设置成功
+        assert self.db.get_group_log_channel(sample_chat_id) == channel_id
+
+    def test_set_group_log_channel_clear(self, sample_chat_id):
+        """测试清除群组日志频道"""
+        # 先设置频道
+        self.db.set_group_log_channel(sample_chat_id, -1001111111111)
+
+        # 清除频道 (设置为None)
+        result = self.db.set_group_log_channel(sample_chat_id, None)
+        assert result is True
+
+        # 验证已清除
+        assert self.db.get_group_log_channel(sample_chat_id) is None
