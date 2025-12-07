@@ -5,6 +5,7 @@ import time
 from collections import defaultdict
 from typing import Dict, Tuple
 
+from config import Config
 from utils.logger import logger
 
 
@@ -14,14 +15,13 @@ class RateLimiter:
     使用asyncio.Lock保护临界区，防止并发访问时的竞态条件
     """
 
-    # 最大记录条目数（防止内存无限增长）
-    MAX_ENTRIES = 10000
-
     def __init__(self):
         # 存储格式: {(user_id, action): [(timestamp1, timestamp2, ...)]}
         self._records: Dict[Tuple[int, str], list] = defaultdict(list)
         # 异步锁，保护_records的并发访问
         self._lock = asyncio.Lock()
+        # 从配置读取最大记录条目数（防止内存无限增长）
+        self.max_entries = Config.RATE_LIMIT_CONFIG.get("max_entries", 10000)
 
     async def is_rate_limited(
         self, user_id: int, action: str, max_calls: int, window_seconds: int
@@ -45,8 +45,10 @@ class RateLimiter:
             # 防止内存无限增长：如果总条目数超过限制，记录警告
             # 注意：不在此处调用cleanup_expired以避免死锁（锁不可重入）
             # 后台清理任务会定期清理过期记录
-            if len(self._records) >= self.MAX_ENTRIES:
-                logger.warning(f"速率限制器记录数达到 {len(self._records)}，建议检查清理任务")
+            if len(self._records) >= self.max_entries:
+                logger.warning(
+                    f"速率限制器记录数达到 {len(self._records)}/{self.max_entries}，建议检查清理任务"
+                )
 
             # 清理过期记录（仅清理当前key）
             self._records[key] = [

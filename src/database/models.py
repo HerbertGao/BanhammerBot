@@ -51,7 +51,14 @@ class CleanupResult(TypedDict):
 
 
 class DatabaseManager:
-    """数据库管理器"""
+    """数据库管理器
+
+    线程安全说明:
+    - SQLite 默认使用 SERIALIZED 模式，支持多线程并发访问
+    - 此类为每个操作创建独立连接，避免连接共享导致的竞态条件
+    - 每个数据库操作自动提交或回滚，保证事务原子性
+    - 适合在异步环境(如 Telegram Bot)中安全使用
+    """
 
     def __init__(self, db_path: str = "banhammer_bot.db"):
         """初始化数据库管理器
