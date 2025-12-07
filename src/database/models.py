@@ -1,9 +1,64 @@
 import sqlite3
 import time
-from typing import Dict, List, Optional, Tuple, TypedDict, Union
+from functools import wraps
+from typing import Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
 from config import Config
 from utils.logger import logger
+
+
+def retry_on_operational_error(
+    max_retries: int = 3, base_delay: float = 0.1, max_delay: float = 2.0
+) -> Callable:
+    """装饰器：针对 SQLite OperationalError 进行重试
+
+    OperationalError 通常是暂时性错误（如数据库锁定），使用指数退避策略重试可提高成功率。
+
+    Args:
+        max_retries: 最大重试次数（默认3次）
+        base_delay: 基础延迟时间（秒，默认0.1）
+        max_delay: 最大延迟时间（秒，默认2.0）
+
+    Returns:
+        装饰后的函数
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_error = None
+
+            for attempt in range(max_retries + 1):  # +1 因为第一次不是重试
+                try:
+                    return func(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    last_error = e
+
+                    # 如果是最后一次尝试，不再重试
+                    if attempt >= max_retries:
+                        logger.error(
+                            f"{func.__name__} 失败（OperationalError，已重试 {max_retries} 次）: {e}",
+                            exc_info=True,
+                        )
+                        raise
+
+                    # 计算延迟时间（指数退避）
+                    delay = min(base_delay * (2**attempt), max_delay)
+
+                    logger.warning(
+                        f"{func.__name__} 遇到 OperationalError（尝试 {attempt + 1}/{max_retries + 1}），"
+                        f"{delay:.2f}s 后重试: {e}"
+                    )
+
+                    time.sleep(delay)
+
+            # 不应该到这里，但为了类型安全
+            raise last_error  # type: ignore
+
+        return wrapper
+
+    return decorator
+
 
 # 哨兵值，用于区分"未提供参数"和"提供了None"
 _UNSET = object()
@@ -190,68 +245,110 @@ class DatabaseManager:
     def add_to_blacklist(
         self, chat_id: int, blacklist_type: str, content: str, created_by: int
     ) -> bool:
-        """添加内容到群组黑名单"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO group_blacklists
-                    (chat_id, blacklist_type, blacklist_content, created_by)
-                    VALUES (?, ?, ?, ?)
-                """,
-                    (chat_id, blacklist_type, content, created_by),
+        """添加内容到群组黑名单（带 OperationalError 重试）"""
+        max_retries = 3
+        base_delay = 0.1
+
+        for attempt in range(max_retries + 1):
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO group_blacklists
+                        (chat_id, blacklist_type, blacklist_content, created_by)
+                        VALUES (?, ?, ?, ?)
+                    """,
+                        (chat_id, blacklist_type, content, created_by),
+                    )
+                    conn.commit()
+                    logger.info(f"已添加黑名单项: {chat_id} - {blacklist_type} - {content}")
+                    return True
+            except sqlite3.IntegrityError as e:
+                logger.warning(
+                    f"黑名单项已存在或违反完整性约束: {chat_id} - {blacklist_type} - {content} | {e}"
                 )
-                conn.commit()
-                logger.info(f"已添加黑名单项: {chat_id} - {blacklist_type} - {content}")
-                return True
-        except sqlite3.IntegrityError as e:
-            logger.warning(
-                f"黑名单项已存在或违反完整性约束: {chat_id} - {blacklist_type} - {content} | {e}"
-            )
-            return False
-        except sqlite3.OperationalError as e:
-            logger.error(f"数据库操作错误（可能被锁定或表不存在）: {e}", exc_info=True)
-            return False
-        except sqlite3.DatabaseError as e:
-            logger.error(f"数据库错误: {e}", exc_info=True)
-            return False
-        except Exception as e:
-            logger.error(f"添加黑名单失败（未知错误）: {e}", exc_info=True)
-            return False
+                return False
+            except sqlite3.OperationalError as e:
+                # OperationalError（如数据库锁定）可能是暂时性的，使用重试
+                if attempt >= max_retries:
+                    logger.error(
+                        f"数据库操作错误（已重试 {max_retries} 次）: {e}",
+                        exc_info=True,
+                    )
+                    return False
+
+                # 指数退避
+                delay = min(base_delay * (2**attempt), 2.0)
+                logger.warning(
+                    f"数据库操作错误（尝试 {attempt + 1}/{max_retries + 1}），"
+                    f"{delay:.2f}s 后重试: {e}"
+                )
+                time.sleep(delay)
+                continue  # 重试
+            except sqlite3.DatabaseError as e:
+                logger.error(f"数据库错误: {e}", exc_info=True)
+                return False
+            except Exception as e:
+                logger.error(f"添加黑名单失败（未知错误）: {e}", exc_info=True)
+                return False
+
+        # 不应该到这里（所有重试都用尽会在上面的 if 块返回）
+        return False
 
     def add_to_global_blacklist(
         self, blacklist_type: str, content: str, contributed_by: int
     ) -> bool:
-        """添加内容到通用黑名单"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO global_blacklists
-                    (blacklist_type, blacklist_content, contributed_by)
-                    VALUES (?, ?, ?)
-                """,
-                    (blacklist_type, content, contributed_by),
+        """添加内容到通用黑名单（带 OperationalError 重试）"""
+        max_retries = 3
+        base_delay = 0.1
+
+        for attempt in range(max_retries + 1):
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO global_blacklists
+                        (blacklist_type, blacklist_content, contributed_by)
+                        VALUES (?, ?, ?)
+                    """,
+                        (blacklist_type, content, contributed_by),
+                    )
+                    conn.commit()
+                    logger.info(f"已添加通用黑名单项: {blacklist_type} - {content}")
+                    return True
+            except sqlite3.IntegrityError as e:
+                logger.warning(
+                    f"通用黑名单项已存在或违反完整性约束: {blacklist_type} - {content} | {e}"
                 )
-                conn.commit()
-                logger.info(f"已添加通用黑名单项: {blacklist_type} - {content}")
-                return True
-        except sqlite3.IntegrityError as e:
-            logger.warning(
-                f"通用黑名单项已存在或违反完整性约束: {blacklist_type} - {content} | {e}"
-            )
-            return False
-        except sqlite3.OperationalError as e:
-            logger.error(f"数据库操作错误（可能被锁定或表不存在）: {e}", exc_info=True)
-            return False
-        except sqlite3.DatabaseError as e:
-            logger.error(f"数据库错误: {e}", exc_info=True)
-            return False
-        except Exception as e:
-            logger.error(f"添加通用黑名单失败（未知错误）: {e}", exc_info=True)
-            return False
+                return False
+            except sqlite3.OperationalError as e:
+                # OperationalError（如数据库锁定）可能是暂时性的，使用重试
+                if attempt >= max_retries:
+                    logger.error(
+                        f"数据库操作错误（已重试 {max_retries} 次）: {e}",
+                        exc_info=True,
+                    )
+                    return False
+
+                # 指数退避
+                delay = min(base_delay * (2**attempt), 2.0)
+                logger.warning(
+                    f"数据库操作错误（尝试 {attempt + 1}/{max_retries + 1}），"
+                    f"{delay:.2f}s 后重试: {e}"
+                )
+                time.sleep(delay)
+                continue  # 重试
+            except sqlite3.DatabaseError as e:
+                logger.error(f"数据库错误: {e}", exc_info=True)
+                return False
+            except Exception as e:
+                logger.error(f"添加通用黑名单失败（未知错误）: {e}", exc_info=True)
+                return False
+
+        # 不应该到这里（所有重试都用尽会在上面的 if 块返回）
+        return False
 
     def check_global_blacklist(self, blacklist_type: str, content: str) -> bool:
         """检查内容是否在通用黑名单中"""
