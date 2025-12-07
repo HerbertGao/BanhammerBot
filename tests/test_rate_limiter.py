@@ -155,7 +155,7 @@ class TestRateLimiter:
         )
 
         # 重置
-        limiter.reset(user_id, action)
+        await limiter.reset(user_id, action)
 
         # 应该可以再次调用
         result = await limiter.is_rate_limited(user_id, action, max_calls=5, window_seconds=60)
@@ -182,7 +182,7 @@ class TestRateLimiter:
         )
 
         # 重置所有操作
-        limiter.reset(user_id)
+        await limiter.reset(user_id)
 
         # 两个操作都应该可以再次调用
         assert (

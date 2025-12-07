@@ -98,26 +98,27 @@ class RateLimiter:
 
             return max(0, int(remaining))
 
-    def reset(self, user_id: int, action: str = None):
+    async def reset(self, user_id: int, action: str = None):
         """
-        重置用户的速率限制记录
+        重置用户的速率限制记录（异步方法，使用锁保护）
 
         Args:
             user_id: 用户ID
             action: 操作类型，None则重置该用户的所有操作
         """
-        if action is None:
-            # 重置用户的所有操作
-            keys_to_remove = [key for key in self._records if key[0] == user_id]
-            for key in keys_to_remove:
-                del self._records[key]
-            logger.info(f"已重置用户 {user_id} 的所有速率限制记录")
-        else:
-            # 重置特定操作
-            key = (user_id, action)
-            if key in self._records:
-                del self._records[key]
-                logger.info(f"已重置用户 {user_id} 的操作 '{action}' 速率限制记录")
+        async with self._lock:
+            if action is None:
+                # 重置用户的所有操作
+                keys_to_remove = [key for key in self._records if key[0] == user_id]
+                for key in keys_to_remove:
+                    del self._records[key]
+                logger.info(f"已重置用户 {user_id} 的所有速率限制记录")
+            else:
+                # 重置特定操作
+                key = (user_id, action)
+                if key in self._records:
+                    del self._records[key]
+                    logger.info(f"已重置用户 {user_id} 的操作 '{action}' 速率限制记录")
 
     async def cleanup_expired(self, window_seconds: int = 3600):
         """

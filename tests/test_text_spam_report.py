@@ -13,13 +13,13 @@ class TestTextSpamReport:
     """测试文字消息举报"""
 
     @pytest.fixture(autouse=True)
-    def setup(self, temp_db_path):
-        """每个测试前设置"""
+    async def setup(self, temp_db_path):
+        """每个测试前设置（异步fixture）"""
         self.handler = BlacklistHandler()
         self.handler.db.db_path = temp_db_path
         self.handler.db.init_database()
         # 重置速率限制
-        rate_limiter.reset(999)  # 测试使用的用户ID
+        await rate_limiter.reset(999)  # 测试使用的用户ID
 
     @pytest.mark.asyncio
     async def test_text_spam_report_first_time(self, sample_chat_id):
