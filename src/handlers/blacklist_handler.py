@@ -169,6 +169,8 @@ class BlacklistHandler:
             sent_message = await self._send_success_message(message, context, confirm_text)
 
             # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
+            # 先清理已完成的任务，防止内存泄漏
+            self._cleanup_completed_tasks()
             task = asyncio.create_task(self._auto_delete_messages([sent_message, message]))
             self.background_tasks.append(task)
 
@@ -367,6 +369,8 @@ class BlacklistHandler:
         sent_message = await self._send_success_message(message, context, confirm_text)
 
         # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
+        # 先清理已完成的任务，防止内存泄漏
+        self._cleanup_completed_tasks()
         task = asyncio.create_task(self._auto_delete_messages([sent_message, message]))
         self.background_tasks.append(task)
 
@@ -1411,6 +1415,21 @@ class BlacklistHandler:
         except Exception as e:
             logger.error(f"清除记录频道设置失败: {e}", exc_info=True)
             await self._send_error_message(message, context, "清除记录频道设置失败")
+
+    def _cleanup_completed_tasks(self):
+        """清理已完成的后台任务（不等待）
+
+        在正常运行时调用，移除已完成的任务以防止内存泄漏
+        """
+        if not self.background_tasks:
+            return
+
+        initial_count = len(self.background_tasks)
+        self.background_tasks = [task for task in self.background_tasks if not task.done()]
+        cleaned_count = initial_count - len(self.background_tasks)
+
+        if cleaned_count > 0:
+            logger.debug(f"清理了 {cleaned_count} 个已完成的后台任务，剩余 {len(self.background_tasks)} 个")
 
     async def cleanup_background_tasks(self):
         """等待所有后台任务完成

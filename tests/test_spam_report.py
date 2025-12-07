@@ -358,3 +358,61 @@ class TestSpamReport:
 
             # 验证任务列表已清空
             assert len(self.handler.background_tasks) == 0
+
+    @pytest.mark.asyncio
+    async def test_background_task_auto_cleanup(self, sample_chat_id):
+        """测试后台任务自动清理功能（防止内存泄漏）"""
+        import asyncio
+        from config import Config
+
+        # 临时修改延迟配置以加快测试
+        original_delay = Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"]
+        Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"] = 0.2  # 200ms延迟
+
+        try:
+            # 创建多个举报消息
+            with patch.object(self.handler, "_is_admin_or_creator", return_value=True):
+                context = MagicMock()
+                context.bot.ban_chat_member = AsyncMock()
+                context.bot.send_message = AsyncMock(return_value=MagicMock())
+
+                # 执行多次举报
+                for i in range(5):
+                    target_message = MagicMock(spec=Message)
+                    target_message.text = f"https://spam{i}.com"
+                    target_message.via_bot = None
+                    target_message.sticker = None
+                    target_message.animation = None
+                    target_message.from_user = User(id=888 + i, first_name="Spammer", is_bot=False)
+                    target_message.message_id = 999 + i
+                    target_message.delete = AsyncMock()
+
+                    update = MagicMock(spec=Update)
+                    update.message = MagicMock(spec=Message)
+                    update.message.text = "/spam"
+                    update.message.reply_to_message = target_message
+                    update.message.chat = MagicMock()
+                    update.message.chat.id = sample_chat_id
+                    update.message.from_user = User(id=999, first_name="Admin", is_bot=False)
+                    update.message.message_id = 1000 + i
+                    update.message.delete = AsyncMock()
+
+                    await self.handler.handle_spam_report(update, context)
+
+                    # 等待一小段时间让之前的任务完成
+                    await asyncio.sleep(0.3)  # 等待比延迟时间稍长
+
+                # 验证列表不会无限增长（应该远少于5个）
+                # 因为已完成的任务会在添加新任务时被清理
+                assert len(self.handler.background_tasks) <= 5
+                assert len(self.handler.background_tasks) >= 1  # 至少有最后一个任务
+
+                # 等待所有任务完成
+                await asyncio.sleep(0.5)
+
+                # 手动清理验证
+                self.handler._cleanup_completed_tasks()
+                assert len(self.handler.background_tasks) == 0
+        finally:
+            # 恢复原始配置
+            Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"] = original_delay
