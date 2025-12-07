@@ -1,11 +1,43 @@
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypedDict
 
 from config import Config
 from utils.logger import logger
 
 # 哨兵值，用于区分"未提供参数"和"提供了None"
 _UNSET = object()
+
+
+# TypedDict 类型定义，提供更好的类型安全性
+class GroupSettings(TypedDict):
+    """群组设置"""
+
+    contribute_to_global: bool
+    use_global_blacklist: bool
+    log_channel_id: Optional[int]
+
+
+class GlobalBlacklistStats(TypedDict):
+    """通用黑名单统计信息"""
+
+    total_count: int
+    type_stats: Dict[str, int]
+    total_usage: int
+
+
+class TextReportInfo(TypedDict):
+    """文字消息举报信息"""
+
+    report_count: int
+    is_blacklisted: bool
+    should_add_to_blacklist: bool
+
+
+class CleanupResult(TypedDict):
+    """清理结果"""
+
+    group_blacklist: int
+    global_blacklist: int
 
 
 class DatabaseManager:
@@ -18,6 +50,25 @@ class DatabaseManager:
 
         self.text_spam_threshold = Config.BLACKLIST_CONFIG.get("text_spam_threshold", 3)
         self.init_database()
+
+    def __enter__(self):
+        """Context manager 入口"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager 出口"""
+        self.close()
+        return False
+
+    def close(self):
+        """关闭数据库连接并清理资源
+
+        注意：当前实现使用 context manager 管理连接，不需要持久连接。
+        此方法为未来扩展预留，并提供显式清理接口。
+        """
+        # 当前不需要清理，因为所有连接都通过 with 语句管理
+        # 未来如果添加连接池或持久连接，可以在此处理
+        logger.debug(f"数据库管理器已关闭: {self.db_path}")
 
     def init_database(self):
         """初始化数据库表"""
@@ -206,7 +257,7 @@ class DatabaseManager:
             logger.error(f"更新通用黑名单使用次数失败: {e}")
             return False
 
-    def get_group_settings(self, chat_id: int) -> Dict:
+    def get_group_settings(self, chat_id: int) -> GroupSettings:
         """获取群组设置"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -317,7 +368,7 @@ class DatabaseManager:
             logger.error(f"设置群组记录频道失败: {e}")
             return False
 
-    def get_global_blacklist_stats(self) -> Dict:
+    def get_global_blacklist_stats(self) -> GlobalBlacklistStats:
         """获取通用黑名单统计信息"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -583,7 +634,9 @@ class DatabaseManager:
             logger.error(f"获取群组贡献数量失败: {e}")
             return 0
 
-    def increment_text_report_count(self, chat_id: int, user_id: int, message_hash: str) -> Dict:
+    def increment_text_report_count(
+        self, chat_id: int, user_id: int, message_hash: str
+    ) -> TextReportInfo:
         """增加文字消息举报计数，返回举报信息"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -639,7 +692,9 @@ class DatabaseManager:
             logger.error(f"增加文字消息举报计数失败: {e}")
             return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}
 
-    def get_text_report_info(self, chat_id: int, user_id: int, message_hash: str) -> Dict:
+    def get_text_report_info(
+        self, chat_id: int, user_id: int, message_hash: str
+    ) -> TextReportInfo:
         """获取文字消息举报信息"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -677,7 +732,7 @@ class DatabaseManager:
                 "last_reported_at": None,
             }
 
-    def cleanup_invalid_blacklist_items(self) -> Dict[str, int]:
+    def cleanup_invalid_blacklist_items(self) -> CleanupResult:
         """清理无效的黑名单项"""
         try:
             with sqlite3.connect(self.db_path) as conn:

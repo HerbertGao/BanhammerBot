@@ -113,7 +113,12 @@ class BlacklistHandler:
                 )
 
                 logger.info(
-                    f"已封禁发送者: {target_message.from_user.username} (ID: {target_message.from_user.id})"
+                    f"[SPAM_REPORT] 已封禁发送者 | "
+                    f"user_id={target_message.from_user.id} "
+                    f"username={target_message.from_user.username} "
+                    f"chat_id={message.chat.id} "
+                    f"blacklist_type={blacklist_type} "
+                    f"reporter_id={message.from_user.id}"
                 )
 
             except Exception as e:
@@ -488,7 +493,13 @@ class BlacklistHandler:
 
         source_text = "通用黑名单" if source == "global" else "群组黑名单"
         logger.warning(
-            f"检测到{source_text}违规 - 用户: {user.username}, 类型: {violation_type}, 内容: {content}"
+            f"[BLACKLIST_VIOLATION] 检测到{source_text}违规 | "
+            f"user_id={user.id} "
+            f"username={user.username} "
+            f"chat_id={chat.id} "
+            f"violation_type={violation_type} "
+            f"source={source} "
+            f"content={content[:50] + '...' if len(content) > 50 else content}"
         )
 
         # 删除消息
@@ -528,7 +539,14 @@ class BlacklistHandler:
                     reason=f"发送{source_text}内容 - 类型: {violation_type}",
                 )
 
-                logger.info(f"已封禁用户: {user.username} (ID: {user.id})")
+                logger.info(
+                    f"[BLACKLIST_DETECT] 已封禁用户 | "
+                    f"user_id={user.id} "
+                    f"username={user.username} "
+                    f"chat_id={chat.id} "
+                    f"violation_type={violation_type} "
+                    f"source={source}"
+                )
 
                 # 记录到频道
                 if Config.BLACKLIST_CONFIG["log_actions"]:
