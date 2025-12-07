@@ -299,10 +299,17 @@ class BanhammerBot:
         if not message:
             return
 
-        # 检查用户权限 - 管理员和群主的消息跳过检测
-        if await self._is_admin_or_creator(message):
-            logger.info(f"管理员消息，跳过检测: {message.from_user.username}")
-            return
+        # 检查消息发送者是否存在（频道消息的from_user为None）
+        if message.from_user:
+            # 检查用户权限 - 管理员和群主的消息跳过检测
+            if await self._is_admin_or_creator(message):
+                logger.info(
+                    f"管理员消息，跳过检测: {message.from_user.username} (ID: {message.from_user.id})"
+                )
+                return
+        else:
+            # 频道消息，继续进行黑名单检测
+            logger.debug("检测到频道消息，继续黑名单检测")
 
         # 使用共享的黑名单处理器实例检查黑名单
         if await self.blacklist_handler.check_blacklist(message, context):

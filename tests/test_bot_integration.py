@@ -355,3 +355,29 @@ class TestBotIntegration:
 
         # 验证过期记录被清除
         assert len(rate_limiter._records) == 0
+
+    @pytest.mark.asyncio
+    async def test_handle_message_channel_message(self, bot_instance, sample_chat_id):
+        """测试处理频道消息（from_user为None）"""
+        update = MagicMock(spec=Update)
+        message = MagicMock(spec=Message)
+        message.text = "正常消息"
+        message.via_bot = None
+        message.sticker = None
+        message.animation = None
+        message.chat = MagicMock()
+        message.chat.id = sample_chat_id
+        message.from_user = None  # 模拟频道消息
+        message.message_id = 123
+        update.message = message
+
+        context = MagicMock()
+        context.bot.ban_chat_member = AsyncMock()
+        context.bot.send_message = AsyncMock()
+        context.bot.id = 987654321
+
+        # 应该正常处理，不抛出异常
+        await bot_instance._handle_message(update, context)
+
+        # 验证没有调用封禁（频道消息没有from_user）
+        context.bot.ban_chat_member.assert_not_called()
