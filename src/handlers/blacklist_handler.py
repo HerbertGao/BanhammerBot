@@ -393,8 +393,8 @@ class BlacklistHandler:
                 await self._handle_blacklist_violation(message, context, "bot", bot_id, "group")
                 return True
 
-        # 检查链接
-        if message.text:
+        # 检查链接 - 只检查纯链接消息
+        if message.text and self._is_only_link(message.text):
             link = self._extract_link(message.text)
             if link and self.db.check_blacklist(message.chat.id, "link", link):
                 await self._handle_blacklist_violation(message, context, "link", link, "group")
@@ -441,8 +441,8 @@ class BlacklistHandler:
                 await self._handle_blacklist_violation(message, context, "bot", bot_id, "global")
                 return True
 
-        # 检查链接
-        if message.text:
+        # 检查链接 - 只检查纯链接消息
+        if message.text and self._is_only_link(message.text):
             link = self._extract_link(message.text)
             if link and self.db.check_global_blacklist("link", link):
                 self.db.increment_global_blacklist_usage("link", link)
