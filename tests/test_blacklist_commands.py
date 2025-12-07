@@ -291,6 +291,17 @@ class TestBlacklistCommands:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_is_admin_or_creator_none_from_user(self):
+        """测试from_user为None的情况（频道消息）"""
+        message = MagicMock(spec=Message)
+        message.chat = MagicMock()
+        message.from_user = None  # 频道消息没有from_user
+
+        result = await self.handler._is_admin_or_creator(message)
+        # 应该返回False而不是崩溃
+        assert result is False
+
+    @pytest.mark.asyncio
     async def test_send_success_message(self, sample_chat_id):
         """测试发送成功消息"""
         message = MagicMock(spec=Message)

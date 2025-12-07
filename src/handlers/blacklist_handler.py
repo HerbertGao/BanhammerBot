@@ -1149,6 +1149,11 @@ class BlacklistHandler:
 
     async def _is_admin_or_creator(self, message: Message) -> bool:
         """检查用户是否为管理员或群主"""
+        # 检查消息发送者是否存在（频道消息的from_user为None）
+        if not message.from_user:
+            logger.warning("无法检查权限：消息发送者为空（可能是频道消息）")
+            return False
+
         try:
             chat_member = await message.chat.get_member(message.from_user.id)
             return chat_member.status in ["administrator", "creator"]
