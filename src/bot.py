@@ -62,6 +62,15 @@ class BanhammerBot:
             )
             logger.info(f"已启动速率限制器定期清理任务（间隔: {interval}秒）")
 
+            # 添加每日数据库清理任务（凌晨3点执行）
+            import datetime
+
+            self.application.job_queue.run_daily(
+                callback=self._cleanup_database,
+                time=datetime.time(hour=3, minute=0),  # 每天凌晨3点执行
+            )
+            logger.info("已启动数据库定期清理任务（每天凌晨3点执行）")
+
         logger.info("Banhammer Bot 启动成功！")
 
         # 简单启动
@@ -423,6 +432,18 @@ class BanhammerBot:
             logger.debug(f"速率限制器清理任务执行完成（保留窗口: {retention}秒）")
         except Exception as e:
             logger.error(f"清理速率限制器时出错: {e}", exc_info=True)
+
+    async def _cleanup_database(self, context: ContextTypes.DEFAULT_TYPE):
+        """定期清理数据库无效记录（后台任务，每天凌晨3点执行）"""
+        try:
+            result = self.db.cleanup_invalid_blacklist_items()
+            logger.info(
+                f"数据库清理任务完成 - "
+                f"群组黑名单: {result['group_blacklist']} 条, "
+                f"通用黑名单: {result['global_blacklist']} 条"
+            )
+        except Exception as e:
+            logger.error(f"清理数据库时出错: {e}", exc_info=True)
 
 
 def main():
