@@ -1,7 +1,9 @@
 name: Docker Image Build
 
-on:  
+on:
   push:
+    branches: [ main, master ]
+  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
     inputs:
@@ -20,6 +22,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
 
     - name: Log into GitHub Container Registry
+      if: github.event_name != 'pull_request'
       run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
     - name: Build and push Docker image
@@ -27,43 +30,64 @@ jobs:
         PLATFORMS=linux/arm64,linux/amd64
         # 强制仓库名小写
         DOCKER_IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        ARCH_TAGS="arm64 amd64"        
+        ARCH_TAGS="arm64 amd64"
         VERSION=${{ inputs.version || github.sha }}
-        
+
         # 设置环境变量供后续步骤使用
         echo "DOCKER_IMAGE_LOWERCASE=$DOCKER_IMAGE" >> $GITHUB_ENV
         echo "IMAGE_VERSION=$VERSION" >> $GITHUB_ENV
-        
-        # 构建多平台镜像
-        docker buildx build --platform $PLATFORMS \
-          -f Dockerfile.github-actions \
-          -t $DOCKER_IMAGE:latest \
-          -t $DOCKER_IMAGE:${VERSION} \
-          --push .
-        
-        # 为每个架构构建单独的镜像
-        for ARCH in $ARCH_TAGS; do
-          if [ "$ARCH" == "arm64" ]; then
-            TAG_ARCH="aarch64"
-          else
-            TAG_ARCH=$ARCH
-          fi
-          docker buildx build --platform linux/${ARCH} \
-            -f Dockerfile.github-actions \
-            -t ${DOCKER_IMAGE}-${TAG_ARCH}:latest \
-            -t ${DOCKER_IMAGE}-${TAG_ARCH}:${VERSION} \
-            --push .
-        done
+
+        # 根据事件类型决定是否推送
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          BUILD_ARGS="--load"
+          echo "PR模式：只构建不推送镜像"
+        else
+          BUILD_ARGS="--push"
+          echo "Push模式：构建并推送镜像"
+        fi
+
+        # 构建多平台镜像（PR时只构建单平台以节省时间）
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          # PR时只构建linux/amd64平台用于验证
+          docker buildx build --platform linux/amd64 \
+            -f Dockerfile \
+            -t $DOCKER_IMAGE:pr-${{ github.event.pull_request.number }} \
+            $BUILD_ARGS .
+        else
+          # Push时构建多平台镜像
+          docker buildx build --platform $PLATFORMS \
+            -f Dockerfile \
+            -t $DOCKER_IMAGE:latest \
+            -t $DOCKER_IMAGE:${VERSION} \
+            $BUILD_ARGS .
+
+          # 为每个架构构建单独的镜像
+          for ARCH in $ARCH_TAGS; do
+            if [ "$ARCH" == "arm64" ]; then
+              TAG_ARCH="aarch64"
+            else
+              TAG_ARCH=$ARCH
+            fi
+            docker buildx build --platform linux/${ARCH} \
+              -f Dockerfile \
+              -t ${DOCKER_IMAGE}-${TAG_ARCH}:latest \
+              -t ${DOCKER_IMAGE}-${TAG_ARCH}:${VERSION} \
+              $BUILD_ARGS .
+          done
+        fi
 
     - name: Run security scan
+      # PR模式下跳过Trivy扫描，因为镜像只加载到本地（--load）不推送到registry
+      # 安全扫描会在合并到main分支时执行
+      if: github.event_name != 'pull_request'
       uses: aquasecurity/trivy-action@master
       with:
-        image-ref: ${{ env.DOCKER_IMAGE_LOWERCASE }}:${{ env.IMAGE_VERSION }}
+        image-ref: ${{ format('{0}:{1}', env.DOCKER_IMAGE_LOWERCASE, env.IMAGE_VERSION) }}
         format: 'sarif'
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v3
-      if: always()
+      if: always() && github.event_name != 'pull_request'
       with:
         sarif_file: 'trivy-results.sarif' 
