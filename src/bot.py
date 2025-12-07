@@ -414,7 +414,7 @@ class BanhammerBot:
         try:
             cleanup_config = Config.RATE_LIMIT_CONFIG.get("cleanup", {})
             retention = cleanup_config.get("retention_seconds", 3600)
-            rate_limiter.cleanup_expired(window_seconds=retention)
+            await rate_limiter.cleanup_expired(window_seconds=retention)
             logger.debug(f"速率限制器清理任务执行完成（保留窗口: {retention}秒）")
         except Exception as e:
             logger.error(f"清理速率限制器时出错: {e}", exc_info=True)

@@ -416,3 +416,68 @@ class TestSpamReport:
         finally:
             # 恢复原始配置
             Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"] = original_delay
+
+    @pytest.mark.asyncio
+    async def test_background_task_limit_enforcement(self, sample_chat_id):
+        """测试后台任务数量限制的强制执行"""
+        import asyncio
+        from config import Config
+
+        # 临时修改最大任务数限制和延迟配置
+        original_max_tasks = self.handler.MAX_BACKGROUND_TASKS
+        original_delay = Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"]
+
+        # 设置小的限制值用于测试（3个任务）
+        self.handler.MAX_BACKGROUND_TASKS = 3
+        # 设置较长延迟，确保任务不会立即完成
+        Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"] = 5.0
+
+        try:
+            with patch.object(self.handler, "_is_admin_or_creator", return_value=True):
+                context = MagicMock()
+                context.bot.ban_chat_member = AsyncMock()
+                context.bot.send_message = AsyncMock(return_value=MagicMock())
+
+                # 快速创建4个举报（超过限制3个）
+                for i in range(4):
+                    target_message = MagicMock(spec=Message)
+                    target_message.text = f"https://spam{i}.com"
+                    target_message.via_bot = None
+                    target_message.sticker = None
+                    target_message.animation = None
+                    target_message.from_user = User(id=888 + i, first_name="Spammer", is_bot=False)
+                    target_message.message_id = 999 + i
+                    target_message.delete = AsyncMock()
+
+                    update = MagicMock(spec=Update)
+                    update.message = MagicMock(spec=Message)
+                    update.message.text = "/spam"
+                    update.message.reply_to_message = target_message
+                    update.message.chat = MagicMock()
+                    update.message.chat.id = sample_chat_id
+                    update.message.from_user = User(id=999, first_name="Admin", is_bot=False)
+                    update.message.message_id = 1000 + i
+                    update.message.delete = AsyncMock()
+
+                    # 异步执行，不等待完成（模拟高并发）
+                    asyncio.create_task(self.handler.handle_spam_report(update, context))
+
+                # 短暂等待所有举报处理完成
+                await asyncio.sleep(0.5)
+
+                # 验证任务数不超过限制
+                assert len(self.handler.background_tasks) <= self.handler.MAX_BACKGROUND_TASKS, (
+                    f"后台任务数 {len(self.handler.background_tasks)} 超过限制 "
+                    f"{self.handler.MAX_BACKGROUND_TASKS}"
+                )
+
+                # 清理所有任务
+                for task in self.handler.background_tasks:
+                    task.cancel()
+                await asyncio.sleep(0.1)
+                self.handler._cleanup_completed_tasks()
+
+        finally:
+            # 恢复原始配置
+            self.handler.MAX_BACKGROUND_TASKS = original_max_tasks
+            Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"] = original_delay

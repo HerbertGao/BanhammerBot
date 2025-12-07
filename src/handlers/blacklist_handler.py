@@ -16,6 +16,9 @@ from utils.rate_limiter import rate_limiter
 class BlacklistHandler:
     """黑名单处理器"""
 
+    # 最大后台任务数限制（防止内存泄漏）
+    MAX_BACKGROUND_TASKS = 100
+
     def __init__(self, db: Optional[DatabaseManager] = None):
         """初始化黑名单处理器
 
@@ -51,13 +54,13 @@ class BlacklistHandler:
         # 速率限制检查
         if self.rate_limit_config["enabled"]:
             spam_report_config = self.rate_limit_config["spam_report"]
-            if rate_limiter.is_rate_limited(
+            if await rate_limiter.is_rate_limited(
                 message.from_user.id,
                 "spam_report",
                 spam_report_config["max_calls"],
                 spam_report_config["window_seconds"],
             ):
-                remaining = rate_limiter.get_remaining_time(
+                remaining = await rate_limiter.get_remaining_time(
                     message.from_user.id, "spam_report", spam_report_config["window_seconds"]
                 )
                 await self._send_error_message(
@@ -169,8 +172,8 @@ class BlacklistHandler:
             sent_message = await self._send_success_message(message, context, confirm_text)
 
             # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
-            # 先清理已完成的任务，防止内存泄漏
-            self._cleanup_completed_tasks()
+            # 确保任务数不超过限制，防止内存泄漏
+            await self._ensure_task_limit()
             task = asyncio.create_task(self._auto_delete_messages([sent_message, message]))
             self.background_tasks.append(task)
 
@@ -369,8 +372,8 @@ class BlacklistHandler:
         sent_message = await self._send_success_message(message, context, confirm_text)
 
         # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
-        # 先清理已完成的任务，防止内存泄漏
-        self._cleanup_completed_tasks()
+        # 确保任务数不超过限制，防止内存泄漏
+        await self._ensure_task_limit()
         task = asyncio.create_task(self._auto_delete_messages([sent_message, message]))
         self.background_tasks.append(task)
 
@@ -1011,13 +1014,13 @@ class BlacklistHandler:
         # 速率限制检查
         if self.rate_limit_config["enabled"]:
             forward_config = self.rate_limit_config["private_forward"]
-            if rate_limiter.is_rate_limited(
+            if await rate_limiter.is_rate_limited(
                 message.from_user.id,
                 "private_forward",
                 forward_config["max_calls"],
                 forward_config["window_seconds"],
             ):
-                remaining = rate_limiter.get_remaining_time(
+                remaining = await rate_limiter.get_remaining_time(
                     message.from_user.id, "private_forward", forward_config["window_seconds"]
                 )
                 await self._send_private_error_message(
@@ -1433,6 +1436,31 @@ class BlacklistHandler:
 
         if cleaned_count > 0:
             logger.debug(f"清理了 {cleaned_count} 个已完成的后台任务，剩余 {len(self.background_tasks)} 个")
+
+    async def _ensure_task_limit(self):
+        """确保后台任务数不超过限制
+
+        在添加新任务前调用，如果达到限制则等待旧任务完成
+        """
+        # 先清理已完成的任务
+        self._cleanup_completed_tasks()
+
+        # 如果仍然达到或超过限制，等待至少一个任务完成
+        while len(self.background_tasks) >= self.MAX_BACKGROUND_TASKS:
+            logger.warning(
+                f"后台任务数达到限制 {len(self.background_tasks)}/{self.MAX_BACKGROUND_TASKS}，"
+                f"等待任务完成..."
+            )
+            # 等待至少一个任务完成
+            if self.background_tasks:
+                done, pending = await asyncio.wait(
+                    self.background_tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                # 再次清理
+                self._cleanup_completed_tasks()
+            else:
+                # 不应该到这里，但以防万一
+                break
 
     async def cleanup_background_tasks(self):
         """等待所有后台任务完成

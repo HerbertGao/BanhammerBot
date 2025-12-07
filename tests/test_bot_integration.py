@@ -320,7 +320,7 @@ class TestBotIntegration:
         from utils.rate_limiter import rate_limiter
 
         # 添加一些测试记录
-        rate_limiter.is_rate_limited(123, "test_action", 5, 60)
+        await rate_limiter.is_rate_limited(123, "test_action", 5, 60)
         assert len(rate_limiter._records) > 0
 
         # 创建mock context
