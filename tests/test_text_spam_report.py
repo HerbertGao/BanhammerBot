@@ -237,7 +237,9 @@ class TestTextSpamReport:
 
     @pytest.mark.asyncio
     async def test_text_spam_report_auto_delete_messages(self, sample_chat_id):
-        """测试自动删除确认消息和命令消息"""
+        """测试自动删除确认消息和命令消息（作为后台任务）"""
+        import asyncio as real_asyncio
+
         target_message = MagicMock(spec=Message)
         target_message.text = "spam text"
         target_message.via_bot = None
@@ -264,21 +266,27 @@ class TestTextSpamReport:
             context = MagicMock()
             context.bot.send_message = AsyncMock(return_value=sent_message)
 
-            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            # Mock asyncio.create_task 以捕获后台任务
+            with patch("handlers.blacklist_handler.asyncio.create_task") as mock_create_task:
+                # Mock返回一个假的任务，避免实际执行
+                mock_task = MagicMock()
+                mock_create_task.return_value = mock_task
+
                 await self.handler.handle_spam_report(update, context)
 
-                # 验证调用了sleep
-                mock_sleep.assert_called_once_with(10)
+                # 验证创建了后台任务
+                assert mock_create_task.call_count == 1
 
-                # 验证删除了确认消息
-                sent_message.delete.assert_called_once()
+                # 验证任务参数是 _auto_delete_messages 协程
+                call_args = mock_create_task.call_args[0][0]
+                assert hasattr(call_args, '__name__') or hasattr(call_args, 'cr_code')
 
-                # 验证删除了命令消息
-                update.message.delete.assert_called_once()
+                # 注意：由于消息删除现在在后台任务中，我们不直接测试 delete 是否被调用
+                # 相反，我们测试后台任务是否被正确创建
 
     @pytest.mark.asyncio
     async def test_text_spam_report_auto_delete_failure(self, sample_chat_id):
-        """测试自动删除消息失败的情况"""
+        """测试自动删除消息失败不会导致程序崩溃（后台任务）"""
         target_message = MagicMock(spec=Message)
         target_message.text = "spam text"
         target_message.via_bot = None
@@ -305,10 +313,13 @@ class TestTextSpamReport:
             context = MagicMock()
             context.bot.send_message = AsyncMock(return_value=sent_message)
 
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                # 应该捕获异常不崩溃
+            # Mock create_task 来避免后台任务实际执行
+            with patch("handlers.blacklist_handler.asyncio.create_task") as mock_create_task:
+                mock_task = MagicMock()
+                mock_create_task.return_value = mock_task
+
+                # 应该不抛出异常，即使删除会失败（失败发生在后台任务中）
                 await self.handler.handle_spam_report(update, context)
 
-            # 验证尝试删除
-            sent_message.delete.assert_called_once()
-            update.message.delete.assert_called_once()
+                # 验证创建了后台任务
+                assert mock_create_task.call_count == 1

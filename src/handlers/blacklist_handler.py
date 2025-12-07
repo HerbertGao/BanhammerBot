@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import re
 from typing import Dict, Optional, Tuple
@@ -150,8 +151,8 @@ class BlacklistHandler:
 
             sent_message = await self._send_success_message(message, context, confirm_text)
 
-            # 延迟后删除确认消息和/spam命令
-            await self._auto_delete_messages([sent_message, message])
+            # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
+            asyncio.create_task(self._auto_delete_messages([sent_message, message]))
 
             # 记录到频道
             if Config.BLACKLIST_CONFIG["log_actions"]:
@@ -341,8 +342,8 @@ class BlacklistHandler:
 
         sent_message = await self._send_success_message(message, context, confirm_text)
 
-        # 延迟后删除确认消息和/spam命令
-        await self._auto_delete_messages([sent_message, message])
+        # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
+        asyncio.create_task(self._auto_delete_messages([sent_message, message]))
 
         # 记录到频道
         if Config.BLACKLIST_CONFIG["log_actions"]:
