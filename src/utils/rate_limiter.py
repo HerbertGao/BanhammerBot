@@ -42,14 +42,15 @@ class RateLimiter:
             current_time = time.time()
             key = (user_id, action)
 
-            # 防止内存无限增长：如果总条目数超过限制，清理所有过期记录
+            # 防止内存无限增长：如果总条目数超过限制，记录警告
+            # 注意：不在此处调用cleanup_expired以避免死锁（锁不可重入）
+            # 后台清理任务会定期清理过期记录
             if len(self._records) >= self.MAX_ENTRIES:
                 logger.warning(
-                    f"速率限制器记录数达到 {len(self._records)}，执行全局清理"
+                    f"速率限制器记录数达到 {len(self._records)}，建议检查清理任务"
                 )
-                await self.cleanup_expired(window_seconds)
 
-            # 清理过期记录
+            # 清理过期记录（仅清理当前key）
             self._records[key] = [
                 ts for ts in self._records[key] if current_time - ts < window_seconds
             ]
@@ -120,29 +121,33 @@ class RateLimiter:
 
     async def cleanup_expired(self, window_seconds: int = 3600):
         """
-        清理所有过期记录（异步方法，已被is_rate_limited调用，无需额外加锁）
+        清理所有过期记录（异步方法，使用锁保护）
+
+        此方法可以从外部调用（如后台清理任务），会自动获取锁保护并发访问。
 
         Args:
             window_seconds: 保留记录的时间窗口（秒），默认1小时
         """
-        # 注意：此方法仅从is_rate_limited内部调用，锁已在外层获取
-        current_time = time.time()
-        keys_to_remove = []
+        async with self._lock:
+            current_time = time.time()
+            keys_to_remove = []
 
-        for key, timestamps in self._records.items():
-            # 清理过期时间戳
-            self._records[key] = [ts for ts in timestamps if current_time - ts < window_seconds]
+            for key, timestamps in self._records.items():
+                # 清理过期时间戳
+                self._records[key] = [
+                    ts for ts in timestamps if current_time - ts < window_seconds
+                ]
 
-            # 如果记录为空，标记删除
-            if not self._records[key]:
-                keys_to_remove.append(key)
+                # 如果记录为空，标记删除
+                if not self._records[key]:
+                    keys_to_remove.append(key)
 
-        # 删除空记录
-        for key in keys_to_remove:
-            del self._records[key]
+            # 删除空记录
+            for key in keys_to_remove:
+                del self._records[key]
 
-        if keys_to_remove:
-            logger.info(f"清理了 {len(keys_to_remove)} 个过期的速率限制记录")
+            if keys_to_remove:
+                logger.info(f"清理了 {len(keys_to_remove)} 个过期的速率限制记录")
 
 
 # 全局速率限制器实例
