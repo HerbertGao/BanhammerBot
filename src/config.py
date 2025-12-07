@@ -74,4 +74,8 @@ class Config:
             "max_calls": 20,  # 最大调用次数
             "window_seconds": 300,  # 时间窗口（秒），5分钟
         },
+        "cleanup": {
+            "interval_seconds": 3600,  # 清理任务执行间隔（秒），默认1小时
+            "retention_seconds": 3600,  # 保留记录的时间窗口（秒），默认1小时
+        },
     }

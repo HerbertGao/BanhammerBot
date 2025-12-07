@@ -48,14 +48,16 @@ class BanhammerBot:
         # 注册处理器
         self._register_handlers(self.application)
 
-        # 添加定期清理速率限制器的任务（每小时清理一次）
+        # 添加定期清理速率限制器的任务
         if self.application.job_queue:
+            cleanup_config = Config.RATE_LIMIT_CONFIG.get("cleanup", {})
+            interval = cleanup_config.get("interval_seconds", 3600)
             self.application.job_queue.run_repeating(
                 callback=self._cleanup_rate_limiter,
-                interval=3600,  # 每小时执行一次
-                first=3600,  # 启动后1小时开始第一次清理
+                interval=interval,
+                first=interval,  # 启动后首次清理的延迟时间与间隔相同
             )
-            logger.info("已启动速率限制器定期清理任务（每小时）")
+            logger.info(f"已启动速率限制器定期清理任务（间隔: {interval}秒）")
 
         logger.info("Banhammer Bot 启动成功！")
 
@@ -372,8 +374,10 @@ class BanhammerBot:
         from utils.rate_limiter import rate_limiter
 
         try:
-            rate_limiter.cleanup_expired(window_seconds=3600)
-            logger.debug("速率限制器清理任务执行完成")
+            cleanup_config = Config.RATE_LIMIT_CONFIG.get("cleanup", {})
+            retention = cleanup_config.get("retention_seconds", 3600)
+            rate_limiter.cleanup_expired(window_seconds=retention)
+            logger.debug(f"速率限制器清理任务执行完成（保留窗口: {retention}秒）")
         except Exception as e:
             logger.error(f"清理速率限制器时出错: {e}", exc_info=True)
 
