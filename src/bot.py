@@ -74,13 +74,28 @@ class BanhammerBot:
         """停止 Bot 并清理资源"""
         import asyncio
 
+        def _handle_task_result(task):
+            """处理异步停止任务的结果"""
+            try:
+                if not task.cancelled():
+                    # 获取异常（如果有）
+                    exc = task.exception()
+                    if exc:
+                        logger.error(f"异步停止任务出错: {exc}", exc_info=exc)
+            except Exception as e:
+                logger.error(f"处理任务结果时出错: {e}", exc_info=True)
+
         try:
             # 检查是否已有运行中的事件循环
             try:
                 loop = asyncio.get_running_loop()
-                # 如果已有运行中的事件循环，创建任务
-                logger.debug("检测到运行中的事件循环，使用 ensure_future")
-                asyncio.ensure_future(self._async_stop())
+                # 如果已有运行中的事件循环，创建任务并添加回调处理异常
+                logger.warning(
+                    "检测到运行中的事件循环，创建后台任务进行清理。"
+                    "注意：stop()应该在事件循环外调用以确保完全清理。"
+                )
+                task = asyncio.create_task(self._async_stop())
+                task.add_done_callback(_handle_task_result)
             except RuntimeError:
                 # 没有运行中的事件循环，使用 asyncio.run()
                 logger.debug("没有运行中的事件循环，使用 asyncio.run()")
@@ -91,6 +106,13 @@ class BanhammerBot:
 
     async def _async_stop(self):
         """异步停止 Bot（内部方法）"""
+        # 清理黑名单处理器的后台任务
+        if self.blacklist_handler:
+            try:
+                await self.blacklist_handler.cleanup_background_tasks()
+            except Exception as e:
+                logger.error(f"清理黑名单处理器后台任务时出错: {e}", exc_info=True)
+
         if self.application:
             await self.application.stop()
             await self.application.shutdown()

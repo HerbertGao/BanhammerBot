@@ -25,6 +25,7 @@ class BlacklistHandler:
         self.db = db if db is not None else DatabaseManager()
         self.config = Config.BLACKLIST_CONFIG
         self.rate_limit_config = Config.RATE_LIMIT_CONFIG
+        self.background_tasks: list = []  # 跟踪后台任务，用于清理
 
     async def handle_spam_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /spam 举报命令"""
@@ -168,7 +169,8 @@ class BlacklistHandler:
             sent_message = await self._send_success_message(message, context, confirm_text)
 
             # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
-            asyncio.create_task(self._auto_delete_messages([sent_message, message]))
+            task = asyncio.create_task(self._auto_delete_messages([sent_message, message]))
+            self.background_tasks.append(task)
 
             # 记录到频道
             if Config.BLACKLIST_CONFIG["log_actions"]:
@@ -365,7 +367,8 @@ class BlacklistHandler:
         sent_message = await self._send_success_message(message, context, confirm_text)
 
         # 延迟后删除确认消息和/spam命令（后台任务，不阻塞日志记录）
-        asyncio.create_task(self._auto_delete_messages([sent_message, message]))
+        task = asyncio.create_task(self._auto_delete_messages([sent_message, message]))
+        self.background_tasks.append(task)
 
         # 记录到频道
         if Config.BLACKLIST_CONFIG["log_actions"]:
@@ -1408,3 +1411,35 @@ class BlacklistHandler:
         except Exception as e:
             logger.error(f"清除记录频道设置失败: {e}")
             await self._send_error_message(message, context, "清除记录频道设置失败")
+
+    async def cleanup_background_tasks(self):
+        """等待所有后台任务完成
+
+        在Bot停止时调用，确保所有后台任务（如延迟删除消息）完成执行
+        """
+        if not self.background_tasks:
+            logger.debug("没有待处理的后台任务")
+            return
+
+        logger.info(f"等待 {len(self.background_tasks)} 个后台任务完成...")
+
+        # 清理已完成的任务
+        self.background_tasks = [task for task in self.background_tasks if not task.done()]
+
+        if self.background_tasks:
+            # 等待所有未完成的任务，最多等待10秒
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self.background_tasks, return_exceptions=True),
+                    timeout=10.0
+                )
+                logger.info("所有后台任务已完成")
+            except asyncio.TimeoutError:
+                logger.warning(f"部分后台任务未在超时时间内完成，取消 {len(self.background_tasks)} 个任务")
+                for task in self.background_tasks:
+                    if not task.done():
+                        task.cancel()
+            except Exception as e:
+                logger.error(f"等待后台任务完成时出错: {e}", exc_info=True)
+            finally:
+                self.background_tasks.clear()

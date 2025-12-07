@@ -13,9 +13,14 @@ class TestSpamReport:
     @pytest.fixture(autouse=True)
     def setup(self, temp_db_path):
         """每个测试前设置"""
+        from utils.rate_limiter import rate_limiter
+
         self.handler = BlacklistHandler()
         self.handler.db.db_path = temp_db_path
         self.handler.db.init_database()
+
+        # 清理速率限制器，避免测试间相互影响
+        rate_limiter._records.clear()
 
     @pytest.mark.asyncio
     async def test_handle_spam_report_link(self, sample_chat_id):
@@ -310,3 +315,46 @@ class TestSpamReport:
 
             # 验证没有调用封禁（因为from_user为None）
             context.bot.ban_chat_member.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_background_task_cleanup(self, sample_chat_id):
+        """测试后台任务清理功能"""
+        import asyncio
+
+        # 创建举报消息
+        target_message = MagicMock(spec=Message)
+        target_message.text = "https://spam.com"
+        target_message.via_bot = None
+        target_message.sticker = None
+        target_message.animation = None
+        target_message.from_user = User(id=888, first_name="Spammer", is_bot=False)
+        target_message.message_id = 999
+        target_message.delete = AsyncMock()
+
+        update = MagicMock(spec=Update)
+        update.message = MagicMock(spec=Message)
+        update.message.text = "/spam"
+        update.message.reply_to_message = target_message
+        update.message.chat = MagicMock()
+        update.message.chat.id = sample_chat_id
+        update.message.from_user = User(id=999, first_name="Admin", is_bot=False)
+        update.message.message_id = 1000
+        update.message.delete = AsyncMock()
+
+        with patch.object(self.handler, "_is_admin_or_creator", return_value=True):
+            context = MagicMock()
+            context.bot.ban_chat_member = AsyncMock()
+            context.bot.send_message = AsyncMock(return_value=MagicMock())
+
+            # 执行举报（会创建后台任务）
+            await self.handler.handle_spam_report(update, context)
+
+            # 验证后台任务已被创建
+            assert len(self.handler.background_tasks) == 1
+            assert not self.handler.background_tasks[0].done()
+
+            # 清理后台任务
+            await self.handler.cleanup_background_tasks()
+
+            # 验证任务列表已清空
+            assert len(self.handler.background_tasks) == 0
