@@ -313,3 +313,45 @@ class TestBotIntegration:
 
         # 验证数据库仍然被关闭
         # (通过finally块保证执行)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_rate_limiter_task(self, bot_instance):
+        """测试速率限制器清理任务被正确调用"""
+        from utils.rate_limiter import rate_limiter
+
+        # 添加一些测试记录
+        rate_limiter.is_rate_limited(123, "test_action", 5, 60)
+        assert len(rate_limiter._records) > 0
+
+        # 创建mock context
+        context = MagicMock()
+
+        # 调用清理方法
+        await bot_instance._cleanup_rate_limiter(context)
+
+        # 验证记录仍然存在（因为未过期）
+        assert len(rate_limiter._records) > 0
+
+    @pytest.mark.asyncio
+    async def test_cleanup_rate_limiter_removes_expired(self, bot_instance):
+        """测试清理过期的速率限制记录"""
+        import time
+        from utils.rate_limiter import rate_limiter
+
+        # 重置速率限制器
+        rate_limiter._records.clear()
+
+        # 添加过期记录（时间戳设为1小时前）
+        expired_time = time.time() - 3700  # 超过1小时
+        rate_limiter._records[(456, "expired_action")] = [expired_time]
+
+        assert len(rate_limiter._records) == 1
+
+        # 创建mock context
+        context = MagicMock()
+
+        # 调用清理方法
+        await bot_instance._cleanup_rate_limiter(context)
+
+        # 验证过期记录被清除
+        assert len(rate_limiter._records) == 0

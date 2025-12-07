@@ -48,6 +48,15 @@ class BanhammerBot:
         # 注册处理器
         self._register_handlers(self.application)
 
+        # 添加定期清理速率限制器的任务（每小时清理一次）
+        if self.application.job_queue:
+            self.application.job_queue.run_repeating(
+                callback=self._cleanup_rate_limiter,
+                interval=3600,  # 每小时执行一次
+                first=3600,  # 启动后1小时开始第一次清理
+            )
+            logger.info("已启动速率限制器定期清理任务（每小时）")
+
         logger.info("Banhammer Bot 启动成功！")
 
         # 简单启动
@@ -357,6 +366,16 @@ class BanhammerBot:
         except Exception as e:
             logger.error(f"检查用户权限失败: {e}")
             return False
+
+    async def _cleanup_rate_limiter(self, context: ContextTypes.DEFAULT_TYPE):
+        """定期清理速率限制器的过期记录（后台任务）"""
+        from utils.rate_limiter import rate_limiter
+
+        try:
+            rate_limiter.cleanup_expired(window_seconds=3600)
+            logger.debug("速率限制器清理任务执行完成")
+        except Exception as e:
+            logger.error(f"清理速率限制器时出错: {e}", exc_info=True)
 
 
 def main():
