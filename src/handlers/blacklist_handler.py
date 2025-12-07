@@ -1244,12 +1244,17 @@ class BlacklistHandler:
 
             # 检查用户是否在管理员列表中
             admin_user_ids = Config.PRIVATE_FORWARD_CONFIG["admin_user_ids"]
-            if user_id in admin_user_ids:
-                return True
 
-            # 如果没有配置管理员列表，临时允许所有用户（仅用于测试）
+            # 安全检查：如果未配置管理员列表，拒绝所有请求
             if not admin_user_ids:
-                logger.warning(f"未配置管理员用户ID列表，临时允许用户 {user_id} 使用私聊转发功能")
+                logger.error(
+                    f"安全警告：ADMIN_USER_IDS 未配置，拒绝用户 {user_id} 的私聊转发请求。"
+                    f"请在环境变量中设置 ADMIN_USER_IDS。"
+                )
+                return False
+
+            # 检查用户是否在白名单中
+            if user_id in admin_user_ids:
                 return True
 
             return False

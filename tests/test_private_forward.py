@@ -339,3 +339,60 @@ class TestPrivateForward:
 
         # 验证没有发送任何消息
         context.bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_is_bot_admin_without_config(self):
+        """测试未配置ADMIN_USER_IDS时拒绝访问（安全修复）"""
+        from unittest.mock import patch
+
+        user_id = 123456
+        context = MagicMock()
+
+        # Mock PRIVATE_FORWARD_CONFIG with empty admin_user_ids
+        with patch("handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG", {
+            "enabled": True,
+            "admin_user_ids": [],  # 空列表，模拟未配置
+            "auto_add_to_contributing_groups": True,
+            "auto_add_to_global": True,
+        }):
+            # 应该返回 False（拒绝访问）
+            result = await self.handler._is_bot_admin(user_id, context)
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_is_bot_admin_with_valid_admin(self):
+        """测试有效的管理员ID"""
+        from unittest.mock import patch
+
+        user_id = 123456
+        context = MagicMock()
+
+        # Mock PRIVATE_FORWARD_CONFIG with valid admin_user_ids
+        with patch("handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG", {
+            "enabled": True,
+            "admin_user_ids": [123456, 789012],
+            "auto_add_to_contributing_groups": True,
+            "auto_add_to_global": True,
+        }):
+            # 应该返回 True（允许访问）
+            result = await self.handler._is_bot_admin(user_id, context)
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_is_bot_admin_with_invalid_user(self):
+        """测试非管理员用户"""
+        from unittest.mock import patch
+
+        user_id = 999999  # 不在管理员列表中
+        context = MagicMock()
+
+        # Mock PRIVATE_FORWARD_CONFIG with admin_user_ids not including user_id
+        with patch("handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG", {
+            "enabled": True,
+            "admin_user_ids": [123456, 789012],
+            "auto_add_to_contributing_groups": True,
+            "auto_add_to_global": True,
+        }):
+            # 应该返回 False（拒绝访问）
+            result = await self.handler._is_bot_admin(user_id, context)
+            assert result is False
