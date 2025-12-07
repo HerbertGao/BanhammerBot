@@ -13,7 +13,7 @@ authors = [
     {name = "Herbert Gao"}
 ]
 dependencies = [
-    "python-telegram-bot[socks]==22.5",
+    "python-telegram-bot[socks,job-queue]==22.5",
     "python-dotenv==1.2.1",
     "loguru==0.7.3",
 ]
