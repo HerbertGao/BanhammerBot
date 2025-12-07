@@ -30,7 +30,10 @@ class BlacklistHandler:
         """处理 /spam 举报命令"""
         message = update.message
 
-        if not message or not message.reply_to_message:
+        if not message:
+            return
+
+        if not message.reply_to_message:
             await self._send_error_message(message, context, "请回复要举报的消息")
             return
 

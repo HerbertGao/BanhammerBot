@@ -241,3 +241,18 @@ class TestSpamReport:
                 "link", "https://global-spam.com"
             )
             assert is_global_blacklisted is True
+
+    @pytest.mark.asyncio
+    async def test_handle_spam_report_none_message(self):
+        """测试update.message为None的情况（不应崩溃）"""
+        update = MagicMock(spec=Update)
+        update.message = None
+
+        context = MagicMock()
+        context.bot.send_message = AsyncMock()
+
+        # 应该正常返回，不抛出异常
+        await self.handler.handle_spam_report(update, context)
+
+        # 验证没有发送任何消息
+        context.bot.send_message.assert_not_called()
