@@ -575,8 +575,17 @@ class BlacklistHandler:
 
         try:
             user_id = int(args[1])
+            # Telegram用户ID必须是正整数
+            if user_id <= 0:
+                await self._send_error_message(message, context, "用户ID必须是正整数")
+                return
+            # Telegram用户ID的最大值约为2^63-1，但实际使用中远小于此值
+            # 这里设置一个合理的上限（10^12）来防止无意义的大数
+            if user_id > 10**12:
+                await self._send_error_message(message, context, "用户ID超出有效范围")
+                return
         except ValueError:
-            await self._send_error_message(message, context, "无效的用户ID")
+            await self._send_error_message(message, context, "无效的用户ID格式")
             return
 
         # 解除封禁
@@ -1221,8 +1230,19 @@ class BlacklistHandler:
             # 解析频道ID
             try:
                 channel_id = int(channel_id_str)
+                # Telegram频道ID通常是负数（-100开头的13位数字）
+                # 群组ID是负数，频道ID也是负数
+                if channel_id >= 0:
+                    await self._send_error_message(
+                        message, context, "频道ID应该是负数（例如：-1001234567890）"
+                    )
+                    return
+                # 合理的范围检查
+                if channel_id < -10**15 or channel_id > -1:
+                    await self._send_error_message(message, context, "频道ID超出有效范围")
+                    return
             except ValueError:
-                await self._send_error_message(message, context, "无效的频道ID，请输入数字")
+                await self._send_error_message(message, context, "无效的频道ID格式，请输入数字")
                 return
 
             # 验证频道是否存在且Bot有权限
