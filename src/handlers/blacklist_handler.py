@@ -932,6 +932,9 @@ class BlacklistHandler:
         """处理私聊转发消息 - 直接添加黑名单"""
         message = update.message
 
+        if not message:
+            return
+
         # Debug日志：记录收到的消息内容和所有关键字段
         if getattr(Config, "LOG_LEVEL", "").upper() == "DEBUG":
             logger.debug(f"收到私聊消息: {message}")

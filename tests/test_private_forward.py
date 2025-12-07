@@ -324,3 +324,18 @@ class TestPrivateForward:
                 # 验证添加到黑名单
                 is_blacklisted = self.handler.db.check_blacklist(group_id, "link", "https://spam.com")
                 assert is_blacklisted is True
+
+    @pytest.mark.asyncio
+    async def test_private_forward_none_message(self):
+        """测试update.message为None的情况（不应崩溃）"""
+        update = MagicMock(spec=Update)
+        update.message = None
+
+        context = MagicMock()
+        context.bot.send_message = AsyncMock()
+
+        # 应该正常返回，不抛出异常
+        await self.handler.handle_private_forward(update, context)
+
+        # 验证没有发送任何消息
+        context.bot.send_message.assert_not_called()
