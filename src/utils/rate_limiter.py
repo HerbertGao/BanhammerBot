@@ -10,6 +10,9 @@ from utils.logger import logger
 class RateLimiter:
     """基于时间窗口的速率限制器"""
 
+    # 最大记录条目数（防止内存无限增长）
+    MAX_ENTRIES = 10000
+
     def __init__(self):
         # 存储格式: {(user_id, action): [(timestamp1, timestamp2, ...)]}
         self._records: Dict[Tuple[int, str], list] = defaultdict(list)
@@ -31,6 +34,13 @@ class RateLimiter:
         """
         current_time = time.time()
         key = (user_id, action)
+
+        # 防止内存无限增长：如果总条目数超过限制，清理所有过期记录
+        if len(self._records) >= self.MAX_ENTRIES:
+            logger.warning(
+                f"速率限制器记录数达到 {len(self._records)}，执行全局清理"
+            )
+            self.cleanup_expired(window_seconds)
 
         # 清理过期记录
         self._records[key] = [

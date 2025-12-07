@@ -1,3 +1,5 @@
+import asyncio
+
 from telegram import Message, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
@@ -28,7 +30,6 @@ class BanhammerBot:
             raise ValueError("BOT_TOKEN 未设置，请在 .env 文件中配置")
 
         # 初始化数据库，捕获并记录错误
-        self.db = None
         try:
             self.db = DatabaseManager()
             logger.info("数据库初始化成功")
@@ -71,8 +72,13 @@ class BanhammerBot:
             raise
 
     def stop(self):
-        """停止 Bot 并清理资源"""
-        import asyncio
+        """停止 Bot 并清理资源
+
+        注意：
+        - 推荐在主线程中调用此方法，不要在事件循环内部调用
+        - 如果在事件循环中调用，清理任务将在后台执行，可能无法完全清理
+        - 最佳实践是在程序退出前调用此方法
+        """
 
         def _handle_task_result(task):
             """处理异步停止任务的结果"""
