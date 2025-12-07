@@ -86,7 +86,11 @@ class AdminHandler:
 
                 admin_text += f"{user_info}\n"
 
-            admin_text += f"\n📞 呼叫者: {message.from_user.mention_html()}"
+            # 添加呼叫者信息（如果存在）
+            if message.from_user:
+                admin_text += f"\n📞 呼叫者: {message.from_user.mention_html()}"
+            else:
+                admin_text += "\n📞 呼叫者: 频道消息"
 
             # 发送消息
             await context.bot.send_message(
@@ -96,7 +100,8 @@ class AdminHandler:
                 reply_to_message_id=message.message_id,
             )
 
-            logger.info(f"已发送管理员列表给用户 {message.from_user.username}")
+            caller_info = message.from_user.username if message.from_user else "频道"
+            logger.info(f"已发送管理员列表给用户 {caller_info}")
 
         except Exception as e:
             logger.error(f"发送管理员列表失败: {e}", exc_info=True)

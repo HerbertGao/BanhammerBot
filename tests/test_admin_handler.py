@@ -290,3 +290,31 @@ class TestAdminHandler:
 
         # 应该直接返回不报错
         await self.handler.handle_admin_command(update, context)
+
+    @pytest.mark.asyncio
+    async def test_handle_admin_call_from_channel(self):
+        """测试频道消息触发 @admin（from_user 为 None）"""
+        chat = Chat(id=-1001234567890, type="supergroup", title="Test Group")
+
+        update = MagicMock(spec=Update)
+        update.message = MagicMock(spec=Message)
+        update.message.text = "@admin help needed"
+        update.message.chat = chat
+        update.message.from_user = None  # 频道消息没有 from_user
+        update.message.message_id = 123
+
+        admin = MagicMock()
+        admin.user = User(id=1, first_name="Admin", is_bot=False, username="admin1")
+
+        context = MagicMock()
+        context.bot.get_chat_administrators = AsyncMock(return_value=[admin])
+        context.bot.send_message = AsyncMock()
+
+        # 应该正常工作，不崩溃
+        await self.handler.handle_admin_call(update, context)
+
+        # 验证消息已发送
+        context.bot.send_message.assert_called_once()
+        call_args = context.bot.send_message.call_args
+        # 应该显示"频道消息"而不是崩溃
+        assert "频道消息" in call_args.kwargs["text"]
