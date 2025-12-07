@@ -251,7 +251,17 @@ class BlacklistHandler:
         return False
 
     def _extract_link(self, text: str) -> str:
-        """提取链接"""
+        """提取链接
+
+        Args:
+            text: 待提取链接的文本
+
+        Returns:
+            提取到的链接，如果未找到则返回空字符串
+
+        Note:
+            通常在 _is_only_link() 检查之后调用，确保文本包含链接
+        """
         # 匹配各种链接格式
         url_patterns = [r"https?://[^\s]+", r"www\.[^\s]+", r"t\.me/[^\s]+", r"@[a-zA-Z0-9_]+"]
 
@@ -260,7 +270,10 @@ class BlacklistHandler:
             if match:
                 return match.group(0)
 
-        return text.strip()
+        # 如果没有找到匹配的链接，记录警告并返回空字符串
+        # 这通常不应该发生，因为 _is_only_link() 应该先检查
+        logger.warning(f"_extract_link 未能从文本中提取链接: {text[:50]}...")
+        return ""
 
     async def _handle_text_spam_report(
         self,
