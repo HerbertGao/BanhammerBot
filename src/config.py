@@ -37,6 +37,7 @@ class Config:
         "auto_ban_on_blacklist": True,  # 在黑名单中自动封禁
         "ban_duration": 0,  # 封禁时长(0为永久封禁)
         "log_actions": True,  # 记录操作到频道
+        "auto_delete_confirmation_delay": 10,  # 自动删除确认消息的延迟(秒)
     }
 
     # 私聊转发配置

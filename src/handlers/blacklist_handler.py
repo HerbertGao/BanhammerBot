@@ -124,10 +124,10 @@ class BlacklistHandler:
 
             sent_message = await self._send_success_message(message, context, confirm_text)
 
-            # 10秒后删除确认消息和/spam命令
+            # 延迟后删除确认消息和/spam命令
             import asyncio
 
-            await asyncio.sleep(10)
+            await asyncio.sleep(Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"])
 
             # 删除确认消息
             if sent_message:
@@ -330,10 +330,10 @@ class BlacklistHandler:
 
         sent_message = await self._send_success_message(message, context, confirm_text)
 
-        # 10秒后删除确认消息和/spam命令
+        # 延迟后删除确认消息和/spam命令
         import asyncio
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"])
 
         # 删除确认消息
         if sent_message:

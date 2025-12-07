@@ -7,7 +7,7 @@ name = "banhammer-bot"
 version = "1.0.0"
 description = "Telegram 群组管理机器人，用于黑名单管理和垃圾消息防护"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 authors = [
     {name = "Herbert Gao"}
 ]
@@ -31,7 +31,7 @@ dev = [
 
 [tool.black]
 line-length = 100
-target-version = ['py313']
+target-version = ['py311']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -53,7 +53,7 @@ skip_gitignore = false
 known_first_party = ["src"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

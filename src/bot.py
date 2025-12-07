@@ -266,7 +266,10 @@ class BanhammerBot:
 
     async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
         """错误处理器"""
-        logger.error(f"处理更新时发生错误: {context.error}")
+        logger.error(
+            f"处理更新时发生错误 - Update: {update}, Error: {context.error}",
+            exc_info=context.error
+        )
         return None
 
     async def _handle_private_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
