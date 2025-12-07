@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from handlers.blacklist_handler import BlacklistHandler
 from telegram import Message, Update, User
+from utils.rate_limiter import rate_limiter
 
 
 class TestTextSpamReport:
@@ -16,6 +17,8 @@ class TestTextSpamReport:
         self.handler = BlacklistHandler()
         self.handler.db.db_path = temp_db_path
         self.handler.db.init_database()
+        # 重置速率限制
+        rate_limiter.reset(999)  # 测试使用的用户ID
 
     @pytest.mark.asyncio
     async def test_text_spam_report_first_time(self, sample_chat_id):

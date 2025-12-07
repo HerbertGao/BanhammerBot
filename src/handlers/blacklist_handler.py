@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 from config import Config
 from database.models import DatabaseManager
 from utils.logger import logger
+from utils.rate_limiter import rate_limiter
 
 
 class BlacklistHandler:
@@ -17,6 +18,7 @@ class BlacklistHandler:
     def __init__(self):
         self.db = DatabaseManager()
         self.config = Config.BLACKLIST_CONFIG
+        self.rate_limit_config = Config.RATE_LIMIT_CONFIG
 
     async def handle_spam_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /spam 举报命令"""
@@ -30,6 +32,25 @@ class BlacklistHandler:
         if not await self._is_admin_or_creator(message):
             await self._send_error_message(message, context, "只有管理员可以使用此命令")
             return
+
+        # 速率限制检查
+        if self.rate_limit_config["enabled"]:
+            spam_report_config = self.rate_limit_config["spam_report"]
+            if rate_limiter.is_rate_limited(
+                message.from_user.id,
+                "spam_report",
+                spam_report_config["max_calls"],
+                spam_report_config["window_seconds"],
+            ):
+                remaining = rate_limiter.get_remaining_time(
+                    message.from_user.id, "spam_report", spam_report_config["window_seconds"]
+                )
+                await self._send_error_message(
+                    message,
+                    context,
+                    f"操作过于频繁，请在 {remaining} 秒后再试",
+                )
+                return
 
         target_message = message.reply_to_message
         blacklist_type, content = self._extract_blacklist_content(target_message)
@@ -956,6 +977,25 @@ class BlacklistHandler:
                 message, context, "您没有权限使用此功能。只有Bot的管理员才能直接添加黑名单。"
             )
             return
+
+        # 速率限制检查
+        if self.rate_limit_config["enabled"]:
+            forward_config = self.rate_limit_config["private_forward"]
+            if rate_limiter.is_rate_limited(
+                message.from_user.id,
+                "private_forward",
+                forward_config["max_calls"],
+                forward_config["window_seconds"],
+            ):
+                remaining = rate_limiter.get_remaining_time(
+                    message.from_user.id, "private_forward", forward_config["window_seconds"]
+                )
+                await self._send_private_error_message(
+                    message,
+                    context,
+                    f"操作过于频繁，请在 {remaining} 秒后再试",
+                )
+                return
 
         # 提取黑名单内容
         blacklist_type, content = self._extract_blacklist_content(message)

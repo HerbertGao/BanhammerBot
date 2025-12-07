@@ -57,3 +57,20 @@ class Config:
         "timeout": 30,  # 连接超时时间(秒)
         "retry_count": 3,  # 重试次数
     }
+
+    # 速率限制配置
+    RATE_LIMIT_CONFIG = {
+        "enabled": True,  # 是否启用速率限制
+        "spam_report": {
+            "max_calls": 5,  # 最大调用次数
+            "window_seconds": 60,  # 时间窗口（秒）
+        },
+        "blacklist_add": {
+            "max_calls": 10,  # 最大调用次数
+            "window_seconds": 60,  # 时间窗口（秒）
+        },
+        "private_forward": {
+            "max_calls": 20,  # 最大调用次数
+            "window_seconds": 300,  # 时间窗口（秒），5分钟
+        },
+    }
