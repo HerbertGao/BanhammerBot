@@ -26,12 +26,21 @@ class GlobalBlacklistStats(TypedDict):
     total_usage: int
 
 
-class TextReportInfo(TypedDict):
-    """文字消息举报信息"""
+class IncrementTextReportResult(TypedDict):
+    """增加文字消息举报计数后的结果"""
 
     report_count: int
     is_blacklisted: bool
     should_add_to_blacklist: bool
+
+
+class TextReportInfo(TypedDict):
+    """文字消息举报信息（查询结果）"""
+
+    report_count: int
+    is_blacklisted: bool
+    first_reported_at: Optional[str]
+    last_reported_at: Optional[str]
 
 
 class CleanupResult(TypedDict):
@@ -637,7 +646,7 @@ class DatabaseManager:
 
     def increment_text_report_count(
         self, chat_id: int, user_id: int, message_hash: str
-    ) -> TextReportInfo:
+    ) -> IncrementTextReportResult:
         """增加文字消息举报计数，返回举报信息
 
         使用 BEGIN IMMEDIATE 事务确保原子性，避免竞态条件
