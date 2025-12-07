@@ -1018,6 +1018,11 @@ class BlacklistHandler:
             )
             return
 
+        # 检查消息发送者是否存在（防御性编程）
+        if not message.from_user:
+            logger.warning("跳过私聊转发：消息发送者为空")
+            return
+
         # 检查用户是否为Bot的管理员
         if not await self._is_bot_admin(message.from_user.id, context):
             await self._send_private_error_message(

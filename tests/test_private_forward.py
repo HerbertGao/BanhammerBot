@@ -358,6 +358,29 @@ class TestPrivateForward:
         context.bot.send_message.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_private_forward_none_from_user(self):
+        """测试message.from_user为None的情况（防御性编程）"""
+        # 创建一个转发消息，但from_user为None（理论上不应该发生，但我们要防御）
+        update = MagicMock(spec=Update)
+        update.message = MagicMock(spec=Message)
+        update.message.text = "forwarded link: https://example.com"
+        update.message.via_bot = None
+        update.message.sticker = None
+        update.message.animation = None
+        update.message.forward_from = User(id=777, first_name="Spammer", is_bot=False)
+        update.message.from_user = None  # 发送者为空
+        update.message.chat = Chat(id=999, type="private", first_name="Admin")
+
+        context = MagicMock()
+        context.bot.send_message = AsyncMock()
+
+        # 应该正常返回，不抛出异常
+        await self.handler.handle_private_forward(update, context)
+
+        # 验证没有发送任何消息（因为在检查后直接return）
+        context.bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_is_bot_admin_without_config(self):
         """测试未配置ADMIN_USER_IDS时拒绝访问（安全修复）"""
         from unittest.mock import patch
