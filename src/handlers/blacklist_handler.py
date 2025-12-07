@@ -1168,7 +1168,10 @@ class BlacklistHandler:
         except Exception as e:
             # 如果回复失败，尝试发送普通消息
             logger.warning(f"回复消息失败，发送普通消息: {e}")
-            await context.bot.send_message(chat_id=message.chat.id, text=f"❌ {text}")
+            try:
+                await context.bot.send_message(chat_id=message.chat.id, text=f"❌ {text}")
+            except Exception as e2:
+                logger.error(f"发送普通消息也失败: {e2}", exc_info=True)
 
     async def _auto_delete_messages(self, messages: list, delay: int = None):
         """延迟后自动删除消息
