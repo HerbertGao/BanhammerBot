@@ -170,7 +170,7 @@ class DatabaseManager:
                 logger.info("数据库初始化完成")
 
         except Exception as e:
-            logger.error(f"数据库初始化失败: {e}")
+            logger.error(f"数据库初始化失败: {e}", exc_info=True)
             raise
 
     def add_to_blacklist(
@@ -250,7 +250,7 @@ class DatabaseManager:
 
                 return cursor.fetchone() is not None
         except Exception as e:
-            logger.error(f"检查通用黑名单失败: {e}")
+            logger.error(f"检查通用黑名单失败: {e}", exc_info=True)
             return False
 
     def increment_global_blacklist_usage(self, blacklist_type: str, content: str) -> bool:
@@ -269,7 +269,7 @@ class DatabaseManager:
                 conn.commit()
                 return True
         except Exception as e:
-            logger.error(f"更新通用黑名单使用次数失败: {e}")
+            logger.error(f"更新通用黑名单使用次数失败: {e}", exc_info=True)
             return False
 
     def get_group_settings(self, chat_id: int) -> GroupSettings:
@@ -309,7 +309,7 @@ class DatabaseManager:
                         "log_channel_id": None,
                     }
         except Exception as e:
-            logger.error(f"获取群组设置失败: {e}")
+            logger.error(f"获取群组设置失败: {e}", exc_info=True)
             return {
                 "contribute_to_global": False,
                 "use_global_blacklist": True,
@@ -363,7 +363,7 @@ class DatabaseManager:
                 )
                 return True
         except Exception as e:
-            logger.error(f"更新群组设置失败: {e}")
+            logger.error(f"更新群组设置失败: {e}", exc_info=True)
             return False
 
     def get_group_log_channel(self, chat_id: int) -> Optional[int]:
@@ -372,7 +372,7 @@ class DatabaseManager:
             settings = self.get_group_settings(chat_id)
             return settings.get("log_channel_id")
         except Exception as e:
-            logger.error(f"获取群组记录频道失败: {e}")
+            logger.error(f"获取群组记录频道失败: {e}", exc_info=True)
             return None
 
     def set_group_log_channel(self, chat_id: int, log_channel_id: Optional[int]) -> bool:
@@ -380,7 +380,7 @@ class DatabaseManager:
         try:
             return self.update_group_settings(chat_id, log_channel_id=log_channel_id)
         except Exception as e:
-            logger.error(f"设置群组记录频道失败: {e}")
+            logger.error(f"设置群组记录频道失败: {e}", exc_info=True)
             return False
 
     def get_global_blacklist_stats(self) -> GlobalBlacklistStats:
@@ -413,7 +413,7 @@ class DatabaseManager:
                     "total_usage": total_usage,
                 }
         except Exception as e:
-            logger.error(f"获取通用黑名单统计失败: {e}")
+            logger.error(f"获取通用黑名单统计失败: {e}", exc_info=True)
             return {"total_count": 0, "type_stats": {}, "total_usage": 0}
 
     def remove_from_blacklist(self, chat_id: int, blacklist_type: str, content: str) -> bool:
@@ -432,7 +432,7 @@ class DatabaseManager:
                 logger.info(f"已移除黑名单项: {chat_id} - {blacklist_type} - {content}")
                 return True
         except Exception as e:
-            logger.error(f"移除黑名单失败: {e}")
+            logger.error(f"移除黑名单失败: {e}", exc_info=True)
             return False
 
     def get_blacklist(self, chat_id: int) -> List[Dict]:
@@ -462,7 +462,7 @@ class DatabaseManager:
                     )
                 return results
         except Exception as e:
-            logger.error(f"获取黑名单失败: {e}")
+            logger.error(f"获取黑名单失败: {e}", exc_info=True)
             return []
 
     def check_blacklist(self, chat_id: int, blacklist_type: str, content: str) -> bool:
@@ -480,7 +480,7 @@ class DatabaseManager:
 
                 return cursor.fetchone() is not None
         except Exception as e:
-            logger.error(f"检查黑名单失败: {e}")
+            logger.error(f"检查黑名单失败: {e}", exc_info=True)
             return False
 
     def add_ban_record(self, chat_id: int, user_id: int, reason: str, banned_by: int) -> int:
@@ -500,7 +500,7 @@ class DatabaseManager:
                 logger.info(f"已添加封禁记录: {ban_id} - {user_id} - {reason}")
                 return ban_id
         except Exception as e:
-            logger.error(f"添加封禁记录失败: {e}")
+            logger.error(f"添加封禁记录失败: {e}", exc_info=True)
             return 0
 
     def unban_user(self, chat_id: int, user_id: int, unbanned_by: int) -> bool:
@@ -520,7 +520,7 @@ class DatabaseManager:
                 logger.info(f"已解除封禁: {user_id}")
                 return True
         except Exception as e:
-            logger.error(f"解除封禁失败: {e}")
+            logger.error(f"解除封禁失败: {e}", exc_info=True)
             return False
 
     def is_user_banned(self, chat_id: int, user_id: int) -> bool:
@@ -538,7 +538,7 @@ class DatabaseManager:
 
                 return cursor.fetchone() is not None
         except Exception as e:
-            logger.error(f"检查封禁状态失败: {e}")
+            logger.error(f"检查封禁状态失败: {e}", exc_info=True)
             return False
 
     def add_action_log(
@@ -565,7 +565,7 @@ class DatabaseManager:
                 logger.info(f"已添加操作日志: {log_id} - {action_type} - {user_id}")
                 return log_id
         except Exception as e:
-            logger.error(f"添加操作日志失败: {e}")
+            logger.error(f"添加操作日志失败: {e}", exc_info=True)
             return 0
 
     def get_action_logs(self, chat_id: int, limit: int = 50) -> List[Dict]:
@@ -597,7 +597,7 @@ class DatabaseManager:
                     )
                 return results
         except Exception as e:
-            logger.error(f"获取操作日志失败: {e}")
+            logger.error(f"获取操作日志失败: {e}", exc_info=True)
             return []
 
     def remove_group_contributions(self, chat_id: int) -> bool:
@@ -629,7 +629,7 @@ class DatabaseManager:
                 logger.info(f"已删除群组 {chat_id} 贡献的 {count} 条通用黑名单数据")
                 return True
         except Exception as e:
-            logger.error(f"删除群组贡献数据失败: {e}")
+            logger.error(f"删除群组贡献数据失败: {e}", exc_info=True)
             return False
 
     def get_group_contribution_count(self, chat_id: int) -> int:
@@ -646,7 +646,7 @@ class DatabaseManager:
                 )
                 return cursor.fetchone()[0]
         except Exception as e:
-            logger.error(f"获取群组贡献数量失败: {e}")
+            logger.error(f"获取群组贡献数量失败: {e}", exc_info=True)
             return 0
 
     def increment_text_report_count(
@@ -767,7 +767,7 @@ class DatabaseManager:
                         "last_reported_at": None,
                     }
         except Exception as e:
-            logger.error(f"获取文字消息举报信息失败: {e}")
+            logger.error(f"获取文字消息举报信息失败: {e}", exc_info=True)
             return {
                 "report_count": 0,
                 "is_blacklisted": False,
@@ -811,7 +811,7 @@ class DatabaseManager:
 
                 return {"group_blacklist": group_deleted, "global_blacklist": global_deleted}
         except Exception as e:
-            logger.error(f"清理无效黑名单项失败: {e}")
+            logger.error(f"清理无效黑名单项失败: {e}", exc_info=True)
             return {"group_blacklist": 0, "global_blacklist": 0}
 
     def migrate_sticker_blacklist_to_file_unique_id(self) -> Dict[str, int]:
@@ -850,7 +850,7 @@ class DatabaseManager:
                     "migration_required": True,
                 }
         except Exception as e:
-            logger.error(f"检查Sticker黑名单迁移失败: {e}")
+            logger.error(f"检查Sticker黑名单迁移失败: {e}", exc_info=True)
             return {"group_stickers": 0, "global_stickers": 0, "migration_required": False}
 
     def get_contributing_groups(self) -> List[int]:
@@ -869,5 +869,5 @@ class DatabaseManager:
                 logger.info(f"获取到 {len(results)} 个贡献群组")
                 return results
         except Exception as e:
-            logger.error(f"获取贡献群组失败: {e}")
+            logger.error(f"获取贡献群组失败: {e}", exc_info=True)
             return []

@@ -68,7 +68,7 @@ class BanhammerBot:
         try:
             self.application.run_polling()
         except Exception as e:
-            logger.error(f"Bot 运行出错: {e}")
+            logger.error(f"Bot 运行出错: {e}", exc_info=True)
             raise
 
     def stop(self):
@@ -318,7 +318,7 @@ class BanhammerBot:
             )
 
         except Exception as e:
-            logger.error(f"获取管理员列表失败: {e}")
+            logger.error(f"获取管理员列表失败: {e}", exc_info=True)
             await context.bot.send_message(chat_id=message.chat.id, text="❌ 获取管理员列表失败")
 
     async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -404,7 +404,7 @@ class BanhammerBot:
             chat_member = await message.chat.get_member(message.from_user.id)
             return chat_member.status in ["administrator", "creator"]
         except Exception as e:
-            logger.error(f"检查用户权限失败: {e}")
+            logger.error(f"检查用户权限失败: {e}", exc_info=True)
             return False
 
     async def _cleanup_rate_limiter(self, context: ContextTypes.DEFAULT_TYPE):
@@ -425,7 +425,7 @@ def main():
         bot = BanhammerBot()
         bot.start()
     except Exception as e:
-        logger.error(f"启动 Bot 失败: {e}")
+        logger.error(f"启动 Bot 失败: {e}", exc_info=True)
         raise
 
 

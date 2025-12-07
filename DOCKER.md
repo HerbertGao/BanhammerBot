@@ -26,7 +26,7 @@ BanhammerBot/
 
 ```bash
 # 克隆项目
-git clone <your-repo-url>
+git clone https://github.com/HerbertGao/BanhammerBot
 cd BanhammerBot
 
 # 创建环境变量文件

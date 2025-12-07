@@ -105,7 +105,7 @@ class BlacklistHandler:
                 await target_message.delete()
                 logger.info(f"已删除被举报的消息: {target_message.message_id}")
             except Exception as e:
-                logger.error(f"删除被举报消息失败: {e}")
+                logger.error(f"删除被举报消息失败: {e}", exc_info=True)
 
             # 封禁发送者（检查target_message.from_user是否存在）
             if target_message.from_user:
@@ -138,7 +138,7 @@ class BlacklistHandler:
                     )
 
                 except Exception as e:
-                    logger.error(f"封禁发送者失败: {e}")
+                    logger.error(f"封禁发送者失败: {e}", exc_info=True)
             else:
                 logger.warning(f"无法封禁发送者：消息发送者为空（可能是频道消息）")
 
@@ -291,7 +291,7 @@ class BlacklistHandler:
             await target_message.delete()
             logger.info(f"已删除被举报的文字消息: {target_message.message_id}")
         except Exception as e:
-            logger.error(f"删除被举报文字消息失败: {e}")
+            logger.error(f"删除被举报文字消息失败: {e}", exc_info=True)
 
         # 如果举报次数达到阈值，自动加入黑名单
         if report_info["should_add_to_blacklist"]:
@@ -335,7 +335,7 @@ class BlacklistHandler:
                 )
 
             except Exception as e:
-                logger.error(f"封禁文字消息发送者失败: {e}")
+                logger.error(f"封禁文字消息发送者失败: {e}", exc_info=True)
 
             # 如果贡献到通用黑名单成功，记录贡献日志
             if global_success:
@@ -522,7 +522,7 @@ class BlacklistHandler:
                 await message.delete()
                 logger.info(f"已删除违规消息: {message.message_id}")
             except Exception as e:
-                logger.error(f"删除消息失败: {e}")
+                logger.error(f"删除消息失败: {e}", exc_info=True)
             return
 
         user = message.from_user
@@ -544,7 +544,7 @@ class BlacklistHandler:
             await message.delete()
             logger.info(f"已删除违规消息: {message.message_id}")
         except Exception as e:
-            logger.error(f"删除消息失败: {e}")
+            logger.error(f"删除消息失败: {e}", exc_info=True)
 
         # 封禁用户
         if Config.BLACKLIST_CONFIG["auto_ban_on_blacklist"]:
@@ -597,7 +597,7 @@ class BlacklistHandler:
                     )
 
             except Exception as e:
-                logger.error(f"封禁用户失败: {e}")
+                logger.error(f"封禁用户失败: {e}", exc_info=True)
 
     async def handle_unban_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /unban 命令"""
@@ -666,7 +666,7 @@ class BlacklistHandler:
                     )
 
             except Exception as e:
-                logger.error(f"解除封禁失败: {e}")
+                logger.error(f"解除封禁失败: {e}", exc_info=True)
                 await self._send_error_message(message, context, "解除封禁失败")
         else:
             await self._send_error_message(message, context, "用户未被封禁或解除失败")
@@ -1127,7 +1127,7 @@ class BlacklistHandler:
             chat_member = await message.chat.get_member(message.from_user.id)
             return chat_member.status in ["administrator", "creator"]
         except Exception as e:
-            logger.error(f"检查用户权限失败: {e}")
+            logger.error(f"检查用户权限失败: {e}", exc_info=True)
             return False
 
     async def _send_success_message(
@@ -1150,7 +1150,7 @@ class BlacklistHandler:
                 return sent_message
 
             except Exception as e2:
-                logger.error(f"发送普通消息也失败: {e2}")
+                logger.error(f"发送普通消息也失败: {e2}", exc_info=True)
                 return None
 
     async def _send_error_message(
@@ -1187,7 +1187,7 @@ class BlacklistHandler:
                 await msg.delete()
                 logger.info(f"已自动删除消息: {msg.message_id}")
             except Exception as e:
-                logger.error(f"自动删除消息失败: {e}")
+                logger.error(f"自动删除消息失败: {e}", exc_info=True)
 
     async def _log_to_channel(
         self,
@@ -1236,7 +1236,7 @@ class BlacklistHandler:
                 chat_id=log_channel_id, text=log_text, parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            logger.error(f"记录到频道失败: {e}")
+            logger.error(f"记录到频道失败: {e}", exc_info=True)
 
     async def _is_bot_admin(self, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """检查用户是否为Bot的管理员（通过检查是否在Bot的群组中）"""
@@ -1263,7 +1263,7 @@ class BlacklistHandler:
             return False
 
         except Exception as e:
-            logger.error(f"检查Bot管理员权限失败: {e}")
+            logger.error(f"检查Bot管理员权限失败: {e}", exc_info=True)
             return False
 
     async def _send_private_error_message(
@@ -1275,7 +1275,7 @@ class BlacklistHandler:
                 chat_id=message.chat.id, text=f"❌ {text}", parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            logger.error(f"发送私聊错误消息失败: {e}")
+            logger.error(f"发送私聊错误消息失败: {e}", exc_info=True)
 
     async def _show_log_channel_status(self, message: Message, context: ContextTypes.DEFAULT_TYPE):
         """显示记录频道状态"""
@@ -1313,7 +1313,7 @@ class BlacklistHandler:
             )
 
         except Exception as e:
-            logger.error(f"显示记录频道状态失败: {e}")
+            logger.error(f"显示记录频道状态失败: {e}", exc_info=True)
             await self._send_error_message(message, context, "获取记录频道状态失败")
 
     async def _set_log_channel(
@@ -1357,7 +1357,7 @@ class BlacklistHandler:
                     return
 
             except Exception as e:
-                logger.error(f"验证频道失败: {e}")
+                logger.error(f"验证频道失败: {e}", exc_info=True)
                 await self._send_error_message(
                     message, context, "无法访问指定的频道，请检查频道ID和Bot权限"
                 )
@@ -1383,7 +1383,7 @@ class BlacklistHandler:
                     await test_message.delete()
 
                 except Exception as e:
-                    logger.error(f"发送测试消息失败: {e}")
+                    logger.error(f"发送测试消息失败: {e}", exc_info=True)
 
                 await self._send_success_message(
                     message, context, f"记录频道设置成功\n频道: {chat.title}\n频道ID: {channel_id}"
@@ -1394,7 +1394,7 @@ class BlacklistHandler:
                 await self._send_error_message(message, context, "设置记录频道失败")
 
         except Exception as e:
-            logger.error(f"设置记录频道失败: {e}")
+            logger.error(f"设置记录频道失败: {e}", exc_info=True)
             await self._send_error_message(message, context, "设置记录频道失败")
 
     async def _clear_log_channel(self, message: Message, context: ContextTypes.DEFAULT_TYPE):
@@ -1409,7 +1409,7 @@ class BlacklistHandler:
                 await self._send_error_message(message, context, "清除记录频道设置失败")
 
         except Exception as e:
-            logger.error(f"清除记录频道设置失败: {e}")
+            logger.error(f"清除记录频道设置失败: {e}", exc_info=True)
             await self._send_error_message(message, context, "清除记录频道设置失败")
 
     async def cleanup_background_tasks(self):

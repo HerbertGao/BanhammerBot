@@ -62,7 +62,7 @@ class AdminHandler:
             return human_admins
 
         except Exception as e:
-            logger.error(f"获取群组管理员失败: {e}")
+            logger.error(f"获取群组管理员失败: {e}", exc_info=True)
             return []
 
     async def _send_admin_list(
@@ -99,7 +99,7 @@ class AdminHandler:
             logger.info(f"已发送管理员列表给用户 {message.from_user.username}")
 
         except Exception as e:
-            logger.error(f"发送管理员列表失败: {e}")
+            logger.error(f"发送管理员列表失败: {e}", exc_info=True)
 
     async def _send_no_admins_message(self, message: Message, context: ContextTypes.DEFAULT_TYPE):
         """发送无管理员消息"""
@@ -116,7 +116,7 @@ class AdminHandler:
             )
 
         except Exception as e:
-            logger.error(f"发送无管理员消息失败: {e}")
+            logger.error(f"发送无管理员消息失败: {e}", exc_info=True)
 
     async def handle_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /admin 命令"""
@@ -156,4 +156,4 @@ class AdminHandler:
             )
 
         except Exception as e:
-            logger.error(f"发送私聊消息失败: {e}")
+            logger.error(f"发送私聊消息失败: {e}", exc_info=True)
