@@ -1523,9 +1523,14 @@ class BlacklistHandler:
                 logger.warning(
                     f"部分后台任务未在超时时间内完成，取消 {len(self.background_tasks)} 个任务"
                 )
+                # 取消所有未完成的任务
                 for task in self.background_tasks:
                     if not task.done():
                         task.cancel()
+
+                # 等待被取消的任务完成清理（忽略 CancelledError）
+                await asyncio.gather(*self.background_tasks, return_exceptions=True)
+                logger.info("已取消并等待所有后台任务完成清理")
             except Exception as e:
                 logger.error(f"等待后台任务完成时出错: {e}", exc_info=True)
             finally:
