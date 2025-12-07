@@ -1,11 +1,12 @@
 import sqlite3
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, TypedDict, Union
 
 from config import Config
 from utils.logger import logger
 
 # 哨兵值，用于区分"未提供参数"和"提供了None"
 _UNSET = object()
+_UnsetType = type(_UNSET)
 
 
 # TypedDict 类型定义，提供更好的类型安全性
@@ -304,9 +305,9 @@ class DatabaseManager:
     def update_group_settings(
         self,
         chat_id: int,
-        contribute_to_global: bool = _UNSET,
-        use_global_blacklist: bool = _UNSET,
-        log_channel_id: Optional[int] = _UNSET,
+        contribute_to_global: Union[bool, _UnsetType] = _UNSET,
+        use_global_blacklist: Union[bool, _UnsetType] = _UNSET,
+        log_channel_id: Union[Optional[int], _UnsetType] = _UNSET,
     ) -> bool:
         """更新群组设置"""
         try:
@@ -637,57 +638,68 @@ class DatabaseManager:
     def increment_text_report_count(
         self, chat_id: int, user_id: int, message_hash: str
     ) -> TextReportInfo:
-        """增加文字消息举报计数，返回举报信息"""
+        """增加文字消息举报计数，返回举报信息
+
+        使用 BEGIN IMMEDIATE 事务确保原子性，避免竞态条件
+        """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
+                # 使用 BEGIN IMMEDIATE 获取排他锁，避免竞态条件
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    cursor = conn.cursor()
 
-                # 尝试插入新记录，如果已存在则更新计数
-                cursor.execute(
-                    """
-                    INSERT INTO text_report_counts 
-                    (chat_id, user_id, message_hash, report_count, first_reported_at, last_reported_at)
-                    VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ON CONFLICT(chat_id, user_id, message_hash) DO UPDATE SET
-                    report_count = report_count + 1,
-                    last_reported_at = CURRENT_TIMESTAMP
-                    RETURNING report_count, is_blacklisted
-                """,
-                    (chat_id, user_id, message_hash),
-                )
+                    # 尝试插入新记录，如果已存在则更新计数
+                    cursor.execute(
+                        """
+                        INSERT INTO text_report_counts
+                        (chat_id, user_id, message_hash, report_count, first_reported_at, last_reported_at)
+                        VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        ON CONFLICT(chat_id, user_id, message_hash) DO UPDATE SET
+                        report_count = report_count + 1,
+                        last_reported_at = CURRENT_TIMESTAMP
+                        RETURNING report_count, is_blacklisted
+                    """,
+                        (chat_id, user_id, message_hash),
+                    )
 
-                result = cursor.fetchone()
-                if result:
-                    report_count, is_blacklisted = result
-                    conn.commit()
+                    result = cursor.fetchone()
+                    if result:
+                        report_count, is_blacklisted = result
 
-                    # 判断是否应该添加到黑名单（在更新之前）
-                    should_add = report_count >= self.text_spam_threshold and not is_blacklisted
+                        # 判断是否应该添加到黑名单
+                        should_add = report_count >= self.text_spam_threshold and not is_blacklisted
 
-                    # 如果举报次数达到阈值且未加入黑名单，则标记为已加入黑名单
-                    if should_add:
-                        cursor.execute(
-                            """
-                            UPDATE text_report_counts
-                            SET is_blacklisted = 1
-                            WHERE chat_id = ? AND user_id = ? AND message_hash = ?
-                        """,
-                            (chat_id, user_id, message_hash),
-                        )
+                        # 如果举报次数达到阈值且未加入黑名单，则标记为已加入黑名单
+                        if should_add:
+                            cursor.execute(
+                                """
+                                UPDATE text_report_counts
+                                SET is_blacklisted = 1
+                                WHERE chat_id = ? AND user_id = ? AND message_hash = ?
+                            """,
+                                (chat_id, user_id, message_hash),
+                            )
+                            is_blacklisted = True
+
+                        # 提交整个事务
                         conn.commit()
-                        is_blacklisted = True
 
-                    return {
-                        "report_count": report_count,
-                        "is_blacklisted": bool(is_blacklisted),
-                        "should_add_to_blacklist": should_add,
-                    }
-                else:
-                    return {
-                        "report_count": 1,
-                        "is_blacklisted": False,
-                        "should_add_to_blacklist": False,
-                    }
+                        return {
+                            "report_count": report_count,
+                            "is_blacklisted": bool(is_blacklisted),
+                            "should_add_to_blacklist": should_add,
+                        }
+                    else:
+                        conn.commit()
+                        return {
+                            "report_count": 1,
+                            "is_blacklisted": False,
+                            "should_add_to_blacklist": False,
+                        }
+                except Exception:
+                    conn.rollback()
+                    raise
         except Exception as e:
             logger.error(f"增加文字消息举报计数失败: {e}")
             return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}

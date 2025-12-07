@@ -13,13 +13,26 @@ class BanhammerBot:
     """Banhammer Bot 主类"""
 
     def __init__(self):
-        """初始化Bot"""
+        """初始化Bot
+
+        Raises:
+            ValueError: 如果 BOT_TOKEN 未配置
+            Exception: 如果数据库初始化失败
+        """
         self.token = Config.BOT_TOKEN
-        self.db = DatabaseManager()
+        self.db = None
         self.application = None
 
         if not self.token:
             raise ValueError("BOT_TOKEN 未设置，请在 .env 文件中配置")
+
+        # 初始化数据库，捕获并记录错误
+        try:
+            self.db = DatabaseManager()
+            logger.info("数据库初始化成功")
+        except Exception as e:
+            logger.error(f"数据库初始化失败: {e}", exc_info=True)
+            raise RuntimeError(f"无法初始化数据库: {e}") from e
 
     def start(self):
         """启动 Bot"""
@@ -41,11 +54,22 @@ class BanhammerBot:
             raise
 
     def stop(self):
-        """停止 Bot"""
-        if self.application:
-            self.application.stop()
-            self.application.shutdown()
-            logger.info("Banhammer Bot 已停止")
+        """停止 Bot 并清理资源"""
+        try:
+            if self.application:
+                self.application.stop()
+                self.application.shutdown()
+                logger.info("Banhammer Bot 已停止")
+        except Exception as e:
+            logger.error(f"停止 Bot 时出错: {e}", exc_info=True)
+        finally:
+            # 清理数据库连接
+            if self.db:
+                try:
+                    self.db.close()
+                    logger.debug("数据库连接已关闭")
+                except Exception as e:
+                    logger.error(f"关闭数据库时出错: {e}", exc_info=True)
 
     def _register_handlers(self, application: Application):
         """注册消息处理器"""
