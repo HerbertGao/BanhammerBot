@@ -1,5 +1,5 @@
-# 使用Python 3.11作为基础镜像
-FROM python:3.11-slim
+# 使用Python 3.13作为基础镜像
+FROM python:3.13-slim
 
 # 设置构建参数
 ARG VERSION=latest
@@ -18,6 +18,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV VERSION=${VERSION}
+ENV PYTHONPATH=/app/src
 
 # 复制requirements.txt并安装Python依赖
 COPY requirements.txt .
@@ -25,7 +26,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && rm -rf /root/.cache/pip
 
 # 复制项目文件
-COPY . .
+COPY main.py .
+COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 # 创建必要的目录
 RUN mkdir -p logs data
@@ -38,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sqlite3; sqlite3.connect('/app/data/banhammer_bot.db')" || exit 1
 
 # 启动命令
-CMD ["python", "bot.py"] 
+CMD ["python", "main.py"]

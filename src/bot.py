@@ -1,13 +1,11 @@
-from datetime import datetime
-
-from telegram import Update, Message
+from telegram import Message, Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from config import Config
 from database.models import DatabaseManager
-from handlers.blacklist_handler import BlacklistHandler
 from handlers.admin_handler import AdminHandler
+from handlers.blacklist_handler import BlacklistHandler
 from utils.logger import logger
 
 
@@ -59,40 +57,46 @@ class BanhammerBot:
         application.add_handler(CommandHandler("help", self._handle_help))
         application.add_handler(CommandHandler("admin", self._handle_admin))
         application.add_handler(CommandHandler("spam", blacklist_handler.handle_spam_report))
+        application.add_handler(CommandHandler("unban", blacklist_handler.handle_unban_command))
+        application.add_handler(
+            CommandHandler("blacklist", blacklist_handler.handle_blacklist_command)
+        )
         application.add_handler(CommandHandler("global", blacklist_handler.handle_global_command))
-        application.add_handler(CommandHandler("log_channel", blacklist_handler.handle_log_channel_command))
+        application.add_handler(
+            CommandHandler("log_channel", blacklist_handler.handle_log_channel_command)
+        )
         application.add_handler(CommandHandler("cleanup", blacklist_handler.handle_cleanup_command))
         application.add_handler(CommandHandler("private_help", self._handle_private_help))
 
         # 注册群组消息处理器
-        application.add_handler(MessageHandler(
-            filters.TEXT & filters.ChatType.GROUPS & ~filters.COMMAND,
-            self._handle_message
-        ))
+        application.add_handler(
+            MessageHandler(
+                filters.TEXT & filters.ChatType.GROUPS & ~filters.COMMAND, self._handle_message
+            )
+        )
 
         # 注册群组贴纸处理器
-        application.add_handler(MessageHandler(
-            filters.Sticker.ALL & filters.ChatType.GROUPS,
-            self._handle_message
-        ))
+        application.add_handler(
+            MessageHandler(filters.Sticker.ALL & filters.ChatType.GROUPS, self._handle_message)
+        )
 
         # 注册群组GIF处理器
-        application.add_handler(MessageHandler(
-            filters.ANIMATION & filters.ChatType.GROUPS,
-            self._handle_message
-        ))
+        application.add_handler(
+            MessageHandler(filters.ANIMATION & filters.ChatType.GROUPS, self._handle_message)
+        )
 
         # 注册群组内联Bot处理器
-        application.add_handler(MessageHandler(
-            filters.ViaBot() & filters.ChatType.GROUPS,
-            self._handle_message
-        ))
+        application.add_handler(
+            MessageHandler(filters.ViaBot() & filters.ChatType.GROUPS, self._handle_message)
+        )
 
         # 注册私聊转发消息处理器 - 直接添加黑名单
-        application.add_handler(MessageHandler(
-            filters.ChatType.PRIVATE & filters.FORWARDED,
-            blacklist_handler.handle_private_forward
-        ))
+        application.add_handler(
+            MessageHandler(
+                filters.ChatType.PRIVATE & filters.FORWARDED,
+                blacklist_handler.handle_private_forward,
+            )
+        )
 
         # 错误处理器
         application.add_error_handler(self._error_handler)
@@ -106,7 +110,7 @@ class BanhammerBot:
             return
 
         # 检查是否为私聊
-        if message.chat.type == 'private':
+        if message.chat.type == "private":
             welcome_text = (
                 "🤖 <b>Banhammer Bot</b>\n\n"
                 "欢迎使用群组垃圾消息清理机器人！\n\n"
@@ -144,9 +148,7 @@ class BanhammerBot:
             )
 
         await context.bot.send_message(
-            chat_id=message.chat.id,
-            text=welcome_text,
-            parse_mode=ParseMode.HTML
+            chat_id=message.chat.id, text=welcome_text, parse_mode=ParseMode.HTML
         )
 
     async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,9 +206,7 @@ class BanhammerBot:
         )
 
         await context.bot.send_message(
-            chat_id=message.chat.id,
-            text=help_text,
-            parse_mode=ParseMode.HTML
+            chat_id=message.chat.id, text=help_text, parse_mode=ParseMode.HTML
         )
 
     async def _handle_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -227,22 +227,19 @@ class BanhammerBot:
                     admin_list.append(f"{admin.user.first_name}")
 
             if admin_list:
-                admin_text = "👮 <b>群组管理员:</b>\n\n" + "\n".join([f"• {admin}" for admin in admin_list])
+                admin_text = "👮 <b>群组管理员:</b>\n\n" + "\n".join(
+                    [f"• {admin}" for admin in admin_list]
+                )
             else:
                 admin_text = "❌ 无法获取管理员列表"
 
             await context.bot.send_message(
-                chat_id=message.chat.id,
-                text=admin_text,
-                parse_mode=ParseMode.HTML
+                chat_id=message.chat.id, text=admin_text, parse_mode=ParseMode.HTML
             )
 
         except Exception as e:
             logger.error(f"获取管理员列表失败: {e}")
-            await context.bot.send_message(
-                chat_id=message.chat.id,
-                text="❌ 获取管理员列表失败"
-            )
+            await context.bot.send_message(chat_id=message.chat.id, text="❌ 获取管理员列表失败")
 
     async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理普通消息"""
@@ -267,47 +264,6 @@ class BanhammerBot:
             admin_handler = AdminHandler()
             await admin_handler.handle_admin_call(update, context)
 
-    async def _log_to_channel(self, context: ContextTypes.DEFAULT_TYPE, chat, user, action_type: str,
-                              content: str, reason: str):
-        """记录操作到群组指定的频道"""
-        try:
-            # 处理chat为None的情况（如私聊转发）
-            if chat is None:
-                chat_info = "私聊"
-                source_chat_id = None
-            else:
-                chat_info = chat.title
-                source_chat_id = chat.id
-            
-            # 获取群组的记录频道ID
-            log_channel_id = None
-            if source_chat_id:
-                log_channel_id = self.db.get_group_log_channel(source_chat_id)
-            
-            # 如果没有设置记录频道，则不记录
-            if not log_channel_id:
-                logger.info(f"群组 {source_chat_id} 未设置记录频道，跳过记录")
-                return
-            
-            log_text = (
-                f"🔔 <b>操作记录</b>\n\n"
-                f"<b>来源群组:</b> {chat_info}\n"
-                f"<b>用户:</b> {user.username or user.first_name}\n"
-                f"<b>操作:</b> {action_type}\n"
-                f"<b>内容:</b> {content}\n"
-                f"<b>原因:</b> {reason}\n"
-                f"<b>时间:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-
-            await context.bot.send_message(
-                chat_id=log_channel_id,
-                text=log_text,
-                parse_mode=ParseMode.HTML
-            )
-
-        except Exception as e:
-            logger.error(f"记录到频道失败: {e}")
-
     async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
         """错误处理器"""
         logger.error(f"处理更新时发生错误: {context.error}")
@@ -325,7 +281,7 @@ class BanhammerBot:
             "通过私聊转发消息给Bot，可以直接将内容添加到黑名单中，无需在群组中使用命令。\n\n"
             "📋 <b>使用方法:</b>\n"
             "1. 在群组中找到要屏蔽的消息\n"
-            "2. 长按该消息，选择\"转发\"\n"
+            '2. 长按该消息，选择"转发"\n'
             "3. 选择Bot作为转发目标\n"
             "4. Bot会自动识别消息类型并添加到黑名单\n\n"
             "✅ <b>支持的消息类型:</b>\n"
@@ -352,16 +308,14 @@ class BanhammerBot:
         )
 
         await context.bot.send_message(
-            chat_id=message.chat.id,
-            text=help_text,
-            parse_mode=ParseMode.HTML
+            chat_id=message.chat.id, text=help_text, parse_mode=ParseMode.HTML
         )
 
     async def _is_admin_or_creator(self, message: Message) -> bool:
         """检查用户是否为管理员或群主"""
         try:
             chat_member = await message.chat.get_member(message.from_user.id)
-            return chat_member.status in ['administrator', 'creator']
+            return chat_member.status in ["administrator", "creator"]
         except Exception as e:
             logger.error(f"检查用户权限失败: {e}")
             return False
