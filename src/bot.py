@@ -21,6 +21,7 @@ class BanhammerBot:
         """
         self.token = Config.BOT_TOKEN
         self.db = None
+        self.blacklist_handler = None
         self.application = None
 
         if not self.token:
@@ -33,6 +34,9 @@ class BanhammerBot:
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}", exc_info=True)
             raise RuntimeError(f"无法初始化数据库: {e}") from e
+
+        # 初始化黑名单处理器 - 共享数据库连接
+        self.blacklist_handler = BlacklistHandler(db=self.db)
 
     def start(self):
         """启动 Bot"""
@@ -73,23 +77,20 @@ class BanhammerBot:
 
     def _register_handlers(self, application: Application):
         """注册消息处理器"""
-        # 黑名单处理器
-        blacklist_handler = BlacklistHandler()
-
         # 注册命令处理器
         application.add_handler(CommandHandler("start", self._handle_start))
         application.add_handler(CommandHandler("help", self._handle_help))
         application.add_handler(CommandHandler("admin", self._handle_admin))
-        application.add_handler(CommandHandler("spam", blacklist_handler.handle_spam_report))
-        application.add_handler(CommandHandler("unban", blacklist_handler.handle_unban_command))
+        application.add_handler(CommandHandler("spam", self.blacklist_handler.handle_spam_report))
+        application.add_handler(CommandHandler("unban", self.blacklist_handler.handle_unban_command))
         application.add_handler(
-            CommandHandler("blacklist", blacklist_handler.handle_blacklist_command)
+            CommandHandler("blacklist", self.blacklist_handler.handle_blacklist_command)
         )
-        application.add_handler(CommandHandler("global", blacklist_handler.handle_global_command))
+        application.add_handler(CommandHandler("global", self.blacklist_handler.handle_global_command))
         application.add_handler(
-            CommandHandler("log_channel", blacklist_handler.handle_log_channel_command)
+            CommandHandler("log_channel", self.blacklist_handler.handle_log_channel_command)
         )
-        application.add_handler(CommandHandler("cleanup", blacklist_handler.handle_cleanup_command))
+        application.add_handler(CommandHandler("cleanup", self.blacklist_handler.handle_cleanup_command))
         application.add_handler(CommandHandler("private_help", self._handle_private_help))
 
         # 注册群组消息处理器
@@ -118,7 +119,7 @@ class BanhammerBot:
         application.add_handler(
             MessageHandler(
                 filters.ChatType.PRIVATE & filters.FORWARDED,
-                blacklist_handler.handle_private_forward,
+                self.blacklist_handler.handle_private_forward,
             )
         )
 
@@ -282,11 +283,8 @@ class BanhammerBot:
             logger.info(f"管理员消息，跳过检测: {message.from_user.username}")
             return
 
-        # 创建黑名单处理器实例
-        blacklist_handler = BlacklistHandler()
-
-        # 检查黑名单
-        if await blacklist_handler.check_blacklist(message, context):
+        # 使用共享的黑名单处理器实例检查黑名单
+        if await self.blacklist_handler.check_blacklist(message, context):
             return
 
         # 检查 @admin 呼叫（仅文本消息）

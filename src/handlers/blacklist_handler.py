@@ -16,8 +16,13 @@ from utils.rate_limiter import rate_limiter
 class BlacklistHandler:
     """黑名单处理器"""
 
-    def __init__(self):
-        self.db = DatabaseManager()
+    def __init__(self, db: DatabaseManager = None):
+        """初始化黑名单处理器
+
+        Args:
+            db: DatabaseManager实例，如果未提供则创建新实例（用于向后兼容）
+        """
+        self.db = db if db is not None else DatabaseManager()
         self.config = Config.BLACKLIST_CONFIG
         self.rate_limit_config = Config.RATE_LIMIT_CONFIG
 
