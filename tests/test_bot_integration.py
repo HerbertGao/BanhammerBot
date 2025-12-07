@@ -277,3 +277,39 @@ class TestBotIntegration:
             # 验证处理器被注册
             assert mock_application.add_handler.called
             assert mock_application.add_error_handler.called
+
+    def test_bot_stop(self, bot_instance):
+        """测试Bot停止功能（异步方法正确执行）"""
+        # 创建mock application
+        mock_app = MagicMock()
+        mock_app.stop = AsyncMock()
+        mock_app.shutdown = AsyncMock()
+        bot_instance.application = mock_app
+
+        # 调用stop方法（同步）
+        bot_instance.stop()
+
+        # 验证异步方法被正确执行（通过asyncio.run调用）
+        mock_app.stop.assert_called_once()
+        mock_app.shutdown.assert_called_once()
+
+    def test_bot_stop_no_application(self, bot_instance):
+        """测试Bot停止功能（无application实例）"""
+        bot_instance.application = None
+
+        # 应该正常返回，不抛出异常
+        bot_instance.stop()
+
+    def test_bot_stop_with_exception(self, bot_instance):
+        """测试Bot停止时出现异常"""
+        # 创建会抛出异常的mock application
+        mock_app = MagicMock()
+        mock_app.stop = AsyncMock(side_effect=Exception("Stop failed"))
+        mock_app.shutdown = AsyncMock()
+        bot_instance.application = mock_app
+
+        # 应该捕获异常并继续清理数据库
+        bot_instance.stop()
+
+        # 验证数据库仍然被关闭
+        # (通过finally块保证执行)

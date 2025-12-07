@@ -59,11 +59,11 @@ class BanhammerBot:
 
     def stop(self):
         """停止 Bot 并清理资源"""
+        import asyncio
+
         try:
-            if self.application:
-                self.application.stop()
-                self.application.shutdown()
-                logger.info("Banhammer Bot 已停止")
+            # 使用 asyncio.run() 执行异步清理操作
+            asyncio.run(self._async_stop())
         except Exception as e:
             logger.error(f"停止 Bot 时出错: {e}", exc_info=True)
         finally:
@@ -74,6 +74,13 @@ class BanhammerBot:
                     logger.debug("数据库连接已关闭")
                 except Exception as e:
                     logger.error(f"关闭数据库时出错: {e}", exc_info=True)
+
+    async def _async_stop(self):
+        """异步停止 Bot（内部方法）"""
+        if self.application:
+            await self.application.stop()
+            await self.application.shutdown()
+            logger.info("Banhammer Bot 已停止")
 
     def _register_handlers(self, application: Application):
         """注册消息处理器"""
