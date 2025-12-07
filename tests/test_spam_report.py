@@ -3,8 +3,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from handlers.blacklist_handler import BlacklistHandler
 from telegram import Chat, Message, Update, User
+
+from handlers.blacklist_handler import BlacklistHandler
 
 
 class TestSpamReport:
@@ -363,6 +364,7 @@ class TestSpamReport:
     async def test_background_task_auto_cleanup(self, sample_chat_id):
         """测试后台任务自动清理功能（防止内存泄漏）"""
         import asyncio
+
         from config import Config
 
         # 临时修改延迟配置以加快测试
@@ -421,6 +423,7 @@ class TestSpamReport:
     async def test_background_task_limit_enforcement(self, sample_chat_id):
         """测试后台任务数量限制的强制执行"""
         import asyncio
+
         from config import Config
 
         # 临时修改最大任务数限制和延迟配置

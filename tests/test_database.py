@@ -292,7 +292,10 @@ class TestDatabaseManager:
 
             # 尝试添加黑名单应该返回False而不是抛出异常
             result = self.db.add_to_blacklist(
-                chat_id=sample_chat_id, blacklist_type="link", content="https://test.com", created_by=999
+                chat_id=sample_chat_id,
+                blacklist_type="link",
+                content="https://test.com",
+                created_by=999,
             )
             assert result is False
 
@@ -326,7 +329,10 @@ class TestDatabaseManager:
         """测试从黑名单移除"""
         # 先添加一个黑名单项
         self.db.add_to_blacklist(
-            chat_id=sample_chat_id, blacklist_type="link", content="https://spam.com", created_by=999
+            chat_id=sample_chat_id,
+            blacklist_type="link",
+            content="https://spam.com",
+            created_by=999,
         )
 
         # 验证已添加

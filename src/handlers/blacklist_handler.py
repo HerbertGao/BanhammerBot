@@ -793,6 +793,7 @@ class BlacklistHandler:
         await context.bot.send_message(
             chat_id=message.chat.id, text=help_text, parse_mode=ParseMode.HTML
         )
+
     async def _join_global_blacklist(self, message: Message, context: ContextTypes.DEFAULT_TYPE):
         """加入通用黑名单（开启贡献和使用）"""
         current_settings = self.db.get_group_settings(message.chat.id)
@@ -1342,7 +1343,7 @@ class BlacklistHandler:
                     )
                     return
                 # 合理的范围检查
-                if channel_id < -10**15 or channel_id > -1:
+                if channel_id < -(10**15) or channel_id > -1:
                     await self._send_error_message(message, context, "频道ID超出有效范围")
                     return
             except ValueError:
@@ -1435,7 +1436,9 @@ class BlacklistHandler:
         cleaned_count = initial_count - len(self.background_tasks)
 
         if cleaned_count > 0:
-            logger.debug(f"清理了 {cleaned_count} 个已完成的后台任务，剩余 {len(self.background_tasks)} 个")
+            logger.debug(
+                f"清理了 {cleaned_count} 个已完成的后台任务，剩余 {len(self.background_tasks)} 个"
+            )
 
     async def _ensure_task_limit(self):
         """确保后台任务数不超过限制
@@ -1480,12 +1483,13 @@ class BlacklistHandler:
             # 等待所有未完成的任务，最多等待10秒
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*self.background_tasks, return_exceptions=True),
-                    timeout=10.0
+                    asyncio.gather(*self.background_tasks, return_exceptions=True), timeout=10.0
                 )
                 logger.info("所有后台任务已完成")
             except asyncio.TimeoutError:
-                logger.warning(f"部分后台任务未在超时时间内完成，取消 {len(self.background_tasks)} 个任务")
+                logger.warning(
+                    f"部分后台任务未在超时时间内完成，取消 {len(self.background_tasks)} 个任务"
+                )
                 for task in self.background_tasks:
                     if not task.done():
                         task.cancel()

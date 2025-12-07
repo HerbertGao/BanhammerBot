@@ -3,9 +3,10 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from handlers.blacklist_handler import BlacklistHandler
 from telegram import Chat, ChatMember, Message, Update, User
 from telegram.constants import ChatMemberStatus
+
+from handlers.blacklist_handler import BlacklistHandler
 
 
 class TestBlacklistCommands:

@@ -3,8 +3,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from handlers.blacklist_handler import BlacklistHandler
 from telegram import Message, Update, User
+
+from handlers.blacklist_handler import BlacklistHandler
 from utils.rate_limiter import rate_limiter
 
 
@@ -279,7 +280,7 @@ class TestTextSpamReport:
 
                 # 验证任务参数是 _auto_delete_messages 协程
                 call_args = mock_create_task.call_args[0][0]
-                assert hasattr(call_args, '__name__') or hasattr(call_args, 'cr_code')
+                assert hasattr(call_args, "__name__") or hasattr(call_args, "cr_code")
 
                 # 注意：由于消息删除现在在后台任务中，我们不直接测试 delete 是否被调用
                 # 相反，我们测试后台任务是否被正确创建

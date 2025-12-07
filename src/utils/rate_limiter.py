@@ -46,9 +46,7 @@ class RateLimiter:
             # 注意：不在此处调用cleanup_expired以避免死锁（锁不可重入）
             # 后台清理任务会定期清理过期记录
             if len(self._records) >= self.MAX_ENTRIES:
-                logger.warning(
-                    f"速率限制器记录数达到 {len(self._records)}，建议检查清理任务"
-                )
+                logger.warning(f"速率限制器记录数达到 {len(self._records)}，建议检查清理任务")
 
             # 清理过期记录（仅清理当前key）
             self._records[key] = [
@@ -134,9 +132,7 @@ class RateLimiter:
 
             for key, timestamps in self._records.items():
                 # 清理过期时间戳
-                self._records[key] = [
-                    ts for ts in timestamps if current_time - ts < window_seconds
-                ]
+                self._records[key] = [ts for ts in timestamps if current_time - ts < window_seconds]
 
                 # 如果记录为空，标记删除
                 if not self._records[key]:

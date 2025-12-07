@@ -3,6 +3,7 @@
 import sqlite3
 
 import pytest
+
 from database.models import DatabaseManager
 
 

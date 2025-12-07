@@ -3,8 +3,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from handlers.blacklist_handler import BlacklistHandler
 from telegram import Message, Update, User
+
+from handlers.blacklist_handler import BlacklistHandler
 
 
 class TestGlobalBlacklistToggle:

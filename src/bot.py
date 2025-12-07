@@ -131,15 +131,21 @@ class BanhammerBot:
         application.add_handler(CommandHandler("help", self._handle_help))
         application.add_handler(CommandHandler("admin", self._handle_admin))
         application.add_handler(CommandHandler("spam", self.blacklist_handler.handle_spam_report))
-        application.add_handler(CommandHandler("unban", self.blacklist_handler.handle_unban_command))
+        application.add_handler(
+            CommandHandler("unban", self.blacklist_handler.handle_unban_command)
+        )
         application.add_handler(
             CommandHandler("blacklist", self.blacklist_handler.handle_blacklist_command)
         )
-        application.add_handler(CommandHandler("global", self.blacklist_handler.handle_global_command))
+        application.add_handler(
+            CommandHandler("global", self.blacklist_handler.handle_global_command)
+        )
         application.add_handler(
             CommandHandler("log_channel", self.blacklist_handler.handle_log_channel_command)
         )
-        application.add_handler(CommandHandler("cleanup", self.blacklist_handler.handle_cleanup_command))
+        application.add_handler(
+            CommandHandler("cleanup", self.blacklist_handler.handle_cleanup_command)
+        )
         application.add_handler(CommandHandler("private_help", self._handle_private_help))
 
         # 注册群组消息处理器
@@ -351,8 +357,7 @@ class BanhammerBot:
     async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
         """错误处理器"""
         logger.error(
-            f"处理更新时发生错误 - Update: {update}, Error: {context.error}",
-            exc_info=context.error
+            f"处理更新时发生错误 - Update: {update}, Error: {context.error}", exc_info=context.error
         )
         return None
 

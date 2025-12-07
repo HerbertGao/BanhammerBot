@@ -3,9 +3,10 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from handlers.admin_handler import AdminHandler
 from telegram import Chat, ChatMember, Message, Update, User
 from telegram.constants import ChatMemberStatus
+
+from handlers.admin_handler import AdminHandler
 
 
 class TestAdminHandler:
@@ -40,9 +41,7 @@ class TestAdminHandler:
         admin2.user = User(id=2, first_name="Admin2", is_bot=False, username="admin2")
 
         bot_admin = MagicMock()
-        bot_admin.user = User(
-            id=3, first_name="BotAdmin", is_bot=True, username="botadmin"
-        )
+        bot_admin.user = User(id=3, first_name="BotAdmin", is_bot=True, username="botadmin")
 
         mock_context = MagicMock()
         mock_context.bot.get_chat_administrators = AsyncMock(
@@ -60,9 +59,7 @@ class TestAdminHandler:
     async def test_get_chat_admins_error(self):
         """测试获取管理员列表失败"""
         mock_context = MagicMock()
-        mock_context.bot.get_chat_administrators = AsyncMock(
-            side_effect=Exception("API Error")
-        )
+        mock_context.bot.get_chat_administrators = AsyncMock(side_effect=Exception("API Error"))
 
         admins = await self.handler._get_chat_admins(-1001234567890, mock_context)
         assert admins == []
@@ -136,9 +133,7 @@ class TestAdminHandler:
         )
 
         admin2 = MagicMock()
-        admin2.user = User(
-            id=2, first_name="AdminTwo", is_bot=False, username=None
-        )  # 无用户名
+        admin2.user = User(id=2, first_name="AdminTwo", is_bot=False, username=None)  # 无用户名
 
         context = MagicMock()
         context.bot.get_chat_administrators = AsyncMock(return_value=[admin1, admin2])
@@ -244,7 +239,9 @@ class TestAdminHandler:
         update.message = MagicMock(spec=Message)
         update.message.text = "@admin"
         update.message.chat = chat
-        update.message.from_user = User(id=100, first_name="TestUser", is_bot=False, username="testuser")
+        update.message.from_user = User(
+            id=100, first_name="TestUser", is_bot=False, username="testuser"
+        )
         update.message.message_id = 123
 
         admin = MagicMock()

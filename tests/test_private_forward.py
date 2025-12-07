@@ -3,8 +3,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from handlers.blacklist_handler import BlacklistHandler
 from telegram import Chat, Message, Update, User
+
+from handlers.blacklist_handler import BlacklistHandler
 
 
 class TestPrivateForward:
@@ -36,17 +37,19 @@ class TestPrivateForward:
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": True,
-                "auto_add_to_global": True
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
                 await self.handler.handle_private_forward(update, context)
 
                 # 验证添加到群组黑名单
-                is_blacklisted = self.handler.db.check_blacklist(group_id, "link", "https://spam.com")
+                is_blacklisted = self.handler.db.check_blacklist(
+                    group_id, "link", "https://spam.com"
+                )
                 assert is_blacklisted is True
 
                 # 验证添加到全局黑名单
@@ -74,17 +77,19 @@ class TestPrivateForward:
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": True,
-                "auto_add_to_global": True
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
                 await self.handler.handle_private_forward(update, context)
 
                 # 验证添加到黑名单
-                is_blacklisted = self.handler.db.check_blacklist(group_id, "sticker", "StickerID123")
+                is_blacklisted = self.handler.db.check_blacklist(
+                    group_id, "sticker", "StickerID123"
+                )
                 assert is_blacklisted is True
 
     @pytest.mark.asyncio
@@ -106,10 +111,10 @@ class TestPrivateForward:
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": True,
-                "auto_add_to_global": True
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
@@ -209,17 +214,19 @@ class TestPrivateForward:
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": True,
-                "auto_add_to_global": False
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": True, "auto_add_to_global": False},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
                 await self.handler.handle_private_forward(update, context)
 
                 # 验证添加到群组黑名单
-                is_blacklisted = self.handler.db.check_blacklist(group_id, "link", "https://spam.com")
+                is_blacklisted = self.handler.db.check_blacklist(
+                    group_id, "link", "https://spam.com"
+                )
                 assert is_blacklisted is True
 
                 # 验证未添加到全局黑名单
@@ -243,17 +250,19 @@ class TestPrivateForward:
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": False,
-                "auto_add_to_global": True
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": False, "auto_add_to_global": True},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
                 await self.handler.handle_private_forward(update, context)
 
                 # 验证未添加到群组黑名单
-                is_blacklisted = self.handler.db.check_blacklist(group_id, "link", "https://spam.com")
+                is_blacklisted = self.handler.db.check_blacklist(
+                    group_id, "link", "https://spam.com"
+                )
                 assert is_blacklisted is False
 
                 # 验证添加到全局黑名单
@@ -279,18 +288,22 @@ class TestPrivateForward:
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": True,
-                "auto_add_to_global": True
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
                 await self.handler.handle_private_forward(update, context)
 
                 # 验证添加到所有群组黑名单
-                is_blacklisted1 = self.handler.db.check_blacklist(group1_id, "link", "https://spam.com")
-                is_blacklisted2 = self.handler.db.check_blacklist(group2_id, "link", "https://spam.com")
+                is_blacklisted1 = self.handler.db.check_blacklist(
+                    group1_id, "link", "https://spam.com"
+                )
+                is_blacklisted2 = self.handler.db.check_blacklist(
+                    group2_id, "link", "https://spam.com"
+                )
                 assert is_blacklisted1 is True
                 assert is_blacklisted2 is True
 
@@ -307,22 +320,26 @@ class TestPrivateForward:
         update.message.sticker = None
         update.message.animation = None
         update.message.forward_from = None
-        update.message.forward_from_chat = Chat(id=-1003333333333, type="channel", title="Spam Channel")
+        update.message.forward_from_chat = Chat(
+            id=-1003333333333, type="channel", title="Spam Channel"
+        )
         update.message.from_user = User(id=999, first_name="Admin", is_bot=False)
         update.message.chat = Chat(id=999, type="private", first_name="Admin")
 
         with patch.object(self.handler, "_is_bot_admin", return_value=True):
-            with patch("config.Config.PRIVATE_FORWARD_CONFIG", {
-                "auto_add_to_contributing_groups": True,
-                "auto_add_to_global": True
-            }):
+            with patch(
+                "config.Config.PRIVATE_FORWARD_CONFIG",
+                {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+            ):
                 context = MagicMock()
                 context.bot.send_message = AsyncMock()
 
                 await self.handler.handle_private_forward(update, context)
 
                 # 验证添加到黑名单
-                is_blacklisted = self.handler.db.check_blacklist(group_id, "link", "https://spam.com")
+                is_blacklisted = self.handler.db.check_blacklist(
+                    group_id, "link", "https://spam.com"
+                )
                 assert is_blacklisted is True
 
     @pytest.mark.asyncio
@@ -349,12 +366,15 @@ class TestPrivateForward:
         context = MagicMock()
 
         # Mock PRIVATE_FORWARD_CONFIG with empty admin_user_ids
-        with patch("handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG", {
-            "enabled": True,
-            "admin_user_ids": [],  # 空列表，模拟未配置
-            "auto_add_to_contributing_groups": True,
-            "auto_add_to_global": True,
-        }):
+        with patch(
+            "handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG",
+            {
+                "enabled": True,
+                "admin_user_ids": [],  # 空列表，模拟未配置
+                "auto_add_to_contributing_groups": True,
+                "auto_add_to_global": True,
+            },
+        ):
             # 应该返回 False（拒绝访问）
             result = await self.handler._is_bot_admin(user_id, context)
             assert result is False
@@ -368,12 +388,15 @@ class TestPrivateForward:
         context = MagicMock()
 
         # Mock PRIVATE_FORWARD_CONFIG with valid admin_user_ids
-        with patch("handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG", {
-            "enabled": True,
-            "admin_user_ids": [123456, 789012],
-            "auto_add_to_contributing_groups": True,
-            "auto_add_to_global": True,
-        }):
+        with patch(
+            "handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG",
+            {
+                "enabled": True,
+                "admin_user_ids": [123456, 789012],
+                "auto_add_to_contributing_groups": True,
+                "auto_add_to_global": True,
+            },
+        ):
             # 应该返回 True（允许访问）
             result = await self.handler._is_bot_admin(user_id, context)
             assert result is True
@@ -387,12 +410,15 @@ class TestPrivateForward:
         context = MagicMock()
 
         # Mock PRIVATE_FORWARD_CONFIG with admin_user_ids not including user_id
-        with patch("handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG", {
-            "enabled": True,
-            "admin_user_ids": [123456, 789012],
-            "auto_add_to_contributing_groups": True,
-            "auto_add_to_global": True,
-        }):
+        with patch(
+            "handlers.blacklist_handler.Config.PRIVATE_FORWARD_CONFIG",
+            {
+                "enabled": True,
+                "admin_user_ids": [123456, 789012],
+                "auto_add_to_contributing_groups": True,
+                "auto_add_to_global": True,
+            },
+        ):
             # 应该返回 False（拒绝访问）
             result = await self.handler._is_bot_admin(user_id, context)
             assert result is False

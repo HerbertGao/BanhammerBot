@@ -1,8 +1,8 @@
 """测试输入验证"""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from telegram import Chat, Message, Update, User
 from telegram.ext import ContextTypes
 

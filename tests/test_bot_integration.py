@@ -3,8 +3,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from bot import BanhammerBot
 from telegram import Chat, Message, Update, User
+
+from bot import BanhammerBot
 
 
 class TestBotIntegration:
@@ -267,9 +268,7 @@ class TestBotIntegration:
         """测试处理器注册"""
         with patch("bot.Application") as mock_app:
             mock_application = MagicMock()
-            mock_app.builder.return_value.token.return_value.build.return_value = (
-                mock_application
-            )
+            mock_app.builder.return_value.token.return_value.build.return_value = mock_application
 
             # 调用注册方法
             bot_instance._register_handlers(mock_application)
@@ -336,6 +335,7 @@ class TestBotIntegration:
     async def test_cleanup_rate_limiter_removes_expired(self, bot_instance):
         """测试清理过期的速率限制记录"""
         import time
+
         from utils.rate_limiter import rate_limiter
 
         # 重置速率限制器

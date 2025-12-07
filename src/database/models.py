@@ -192,7 +192,9 @@ class DatabaseManager:
                 logger.info(f"已添加黑名单项: {chat_id} - {blacklist_type} - {content}")
                 return True
         except sqlite3.IntegrityError as e:
-            logger.warning(f"黑名单项已存在或违反完整性约束: {chat_id} - {blacklist_type} - {content} | {e}")
+            logger.warning(
+                f"黑名单项已存在或违反完整性约束: {chat_id} - {blacklist_type} - {content} | {e}"
+            )
             return False
         except sqlite3.OperationalError as e:
             logger.error(f"数据库操作错误（可能被锁定或表不存在）: {e}", exc_info=True)
@@ -223,7 +225,9 @@ class DatabaseManager:
                 logger.info(f"已添加通用黑名单项: {blacklist_type} - {content}")
                 return True
         except sqlite3.IntegrityError as e:
-            logger.warning(f"通用黑名单项已存在或违反完整性约束: {blacklist_type} - {content} | {e}")
+            logger.warning(
+                f"通用黑名单项已存在或违反完整性约束: {blacklist_type} - {content} | {e}"
+            )
             return False
         except sqlite3.OperationalError as e:
             logger.error(f"数据库操作错误（可能被锁定或表不存在）: {e}", exc_info=True)
@@ -735,9 +739,7 @@ class DatabaseManager:
             logger.error(f"增加文字消息举报计数失败（未知错误）: {e}", exc_info=True)
             return {"report_count": 0, "is_blacklisted": False, "should_add_to_blacklist": False}
 
-    def get_text_report_info(
-        self, chat_id: int, user_id: int, message_hash: str
-    ) -> TextReportInfo:
+    def get_text_report_info(self, chat_id: int, user_id: int, message_hash: str) -> TextReportInfo:
         """获取文字消息举报信息"""
         try:
             with sqlite3.connect(self.db_path) as conn:
