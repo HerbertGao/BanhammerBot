@@ -13,6 +13,10 @@ class DatabaseManager:
 
     def __init__(self, db_path: str = "banhammer_bot.db"):
         self.db_path = db_path
+        # 避免循环导入，在初始化时延迟导入Config
+        from config import Config
+
+        self.text_spam_threshold = Config.BLACKLIST_CONFIG.get("text_spam_threshold", 3)
         self.init_database()
 
     def init_database(self):
@@ -605,9 +609,9 @@ class DatabaseManager:
                     conn.commit()
 
                     # 判断是否应该添加到黑名单（在更新之前）
-                    should_add = report_count >= 3 and not is_blacklisted
+                    should_add = report_count >= self.text_spam_threshold and not is_blacklisted
 
-                    # 如果举报次数达到3次且未加入黑名单，则标记为已加入黑名单
+                    # 如果举报次数达到阈值且未加入黑名单，则标记为已加入黑名单
                     if should_add:
                         cursor.execute(
                             """

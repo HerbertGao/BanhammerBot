@@ -146,24 +146,7 @@ class BlacklistHandler:
             sent_message = await self._send_success_message(message, context, confirm_text)
 
             # 延迟后删除确认消息和/spam命令
-            import asyncio
-
-            await asyncio.sleep(Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"])
-
-            # 删除确认消息
-            if sent_message:
-                try:
-                    await sent_message.delete()
-                    logger.info(f"已自动删除确认消息: {sent_message.message_id}")
-                except Exception as e:
-                    logger.error(f"自动删除确认消息失败: {e}")
-
-            # 删除/spam命令消息
-            try:
-                await message.delete()
-                logger.info(f"已自动删除/spam命令消息: {message.message_id}")
-            except Exception as e:
-                logger.error(f"自动删除/spam命令消息失败: {e}")
+            await self._auto_delete_messages([sent_message, message])
 
             # 记录到频道
             if Config.BLACKLIST_CONFIG["log_actions"]:
@@ -280,7 +263,7 @@ class BlacklistHandler:
         except Exception as e:
             logger.error(f"删除被举报文字消息失败: {e}")
 
-        # 如果举报次数达到3次，自动加入黑名单
+        # 如果举报次数达到阈值，自动加入黑名单
         if report_info["should_add_to_blacklist"]:
             # 添加到群组黑名单
             success = self.db.add_to_blacklist(
@@ -313,7 +296,7 @@ class BlacklistHandler:
                 ban_id = self.db.add_ban_record(
                     chat_id=message.chat.id,
                     user_id=target_message.from_user.id,
-                    reason="文字消息被举报3次以上，自动加入黑名单",
+                    reason=f"文字消息被举报{self.db.text_spam_threshold}次以上，自动加入黑名单",
                     banned_by=message.from_user.id,
                 )
 
@@ -337,8 +320,8 @@ class BlacklistHandler:
             # 发送确认消息
             confirm_text = (
                 f"文字消息举报处理完成\n"
-                f"举报次数: {report_info['report_count']}/3\n"
-                f"✅ 已达到3次，已自动加入黑名单\n"
+                f"举报次数: {report_info['report_count']}/{self.db.text_spam_threshold}\n"
+                f"✅ 已达到{self.db.text_spam_threshold}次，已自动加入黑名单\n"
                 f"已删除消息并封禁发送者"
             )
             if global_success:
@@ -346,30 +329,15 @@ class BlacklistHandler:
         else:
             # 发送确认消息
             confirm_text = (
-                f"文字消息举报已记录\n" f"举报次数: {report_info['report_count']}/3\n" f"已删除消息"
+                f"文字消息举报已记录\n"
+                f"举报次数: {report_info['report_count']}/{self.db.text_spam_threshold}\n"
+                f"已删除消息"
             )
 
         sent_message = await self._send_success_message(message, context, confirm_text)
 
         # 延迟后删除确认消息和/spam命令
-        import asyncio
-
-        await asyncio.sleep(Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"])
-
-        # 删除确认消息
-        if sent_message:
-            try:
-                await sent_message.delete()
-                logger.info(f"已自动删除确认消息: {sent_message.message_id}")
-            except Exception as e:
-                logger.error(f"自动删除确认消息失败: {e}")
-
-        # 删除/spam命令消息
-        try:
-            await message.delete()
-            logger.info(f"已自动删除/spam命令消息: {message.message_id}")
-        except Exception as e:
-            logger.error(f"自动删除/spam命令消息失败: {e}")
+        await self._auto_delete_messages([sent_message, message])
 
         # 记录到频道
         if Config.BLACKLIST_CONFIG["log_actions"]:
@@ -1139,6 +1107,29 @@ class BlacklistHandler:
             # 如果回复失败，尝试发送普通消息
             logger.warning(f"回复消息失败，发送普通消息: {e}")
             await context.bot.send_message(chat_id=message.chat.id, text=f"❌ {text}")
+
+    async def _auto_delete_messages(self, messages: list, delay: int = None):
+        """延迟后自动删除消息
+
+        Args:
+            messages: 要删除的消息列表
+            delay: 延迟时间(秒)，默认使用配置中的值
+        """
+        import asyncio
+
+        if delay is None:
+            delay = Config.BLACKLIST_CONFIG["auto_delete_confirmation_delay"]
+
+        await asyncio.sleep(delay)
+
+        for msg in messages:
+            if msg is None:
+                continue
+            try:
+                await msg.delete()
+                logger.info(f"已自动删除消息: {msg.message_id}")
+            except Exception as e:
+                logger.error(f"自动删除消息失败: {e}")
 
     async def _log_to_channel(
         self,

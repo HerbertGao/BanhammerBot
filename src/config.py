@@ -38,6 +38,7 @@ class Config:
         "ban_duration": 0,  # 封禁时长(0为永久封禁)
         "log_actions": True,  # 记录操作到频道
         "auto_delete_confirmation_delay": 10,  # 自动删除确认消息的延迟(秒)
+        "text_spam_threshold": 3,  # 文本消息被举报多少次后自动加入黑名单
     }
 
     # 私聊转发配置

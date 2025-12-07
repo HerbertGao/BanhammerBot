@@ -109,6 +109,9 @@ class BanhammerBot:
         if not message:
             return
 
+        # 获取阈值配置
+        threshold = Config.BLACKLIST_CONFIG.get("text_spam_threshold", 3)
+
         # 检查是否为私聊
         if message.chat.type == "private":
             welcome_text = (
@@ -135,7 +138,7 @@ class BanhammerBot:
                 "欢迎使用群组垃圾消息清理机器人！\n\n"
                 "🔧 <b>主要功能:</b>\n"
                 "• 黑名单管理（链接、贴纸、GIF、Bot、文字）\n"
-                "• 文字消息举报计数（3次自动加入黑名单）\n"
+                f"• 文字消息举报计数（{threshold}次自动加入黑名单）\n"
                 "• 自动封禁违规用户\n"
                 "• 通用黑名单共享系统\n"
                 "• 管理员呼叫功能\n\n"
@@ -156,6 +159,9 @@ class BanhammerBot:
         message = update.message
         if not message:
             return
+
+        # 获取阈值配置
+        threshold = Config.BLACKLIST_CONFIG.get("text_spam_threshold", 3)
 
         help_text = (
             "📋 <b>Banhammer Bot 帮助</b>\n\n"
@@ -187,7 +193,7 @@ class BanhammerBot:
             "• 黑名单内联Bot（使用Bot ID）\n"
             "• 文字消息黑名单\n\n"
             "📝 <b>文字消息黑名单:</b>\n"
-            "• 同一发送者的同一消息被举报3次后自动加入黑名单\n"
+            f"• 同一发送者的同一消息被举报{threshold}次后自动加入黑名单\n"
             "• 支持通用黑名单贡献和共享\n"
             "• 自动删除和封禁违规用户\n\n"
             "🛡️ <b>保护措施:</b>\n"
