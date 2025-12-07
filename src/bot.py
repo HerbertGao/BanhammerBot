@@ -62,14 +62,21 @@ class BanhammerBot:
             )
             logger.info(f"已启动速率限制器定期清理任务（间隔: {interval}秒）")
 
-            # 添加每日数据库清理任务（凌晨3点执行）
+            # 添加每日数据库清理任务
             import datetime
 
-            self.application.job_queue.run_daily(
-                callback=self._cleanup_database,
-                time=datetime.time(hour=3, minute=0),  # 每天凌晨3点执行
-            )
-            logger.info("已启动数据库定期清理任务（每天凌晨3点执行）")
+            cleanup_config = Config.DATABASE_CLEANUP_CONFIG
+            if cleanup_config.get("enabled", True):
+                cleanup_hour = cleanup_config.get("hour", 3)
+                cleanup_minute = cleanup_config.get("minute", 0)
+
+                self.application.job_queue.run_daily(
+                    callback=self._cleanup_database,
+                    time=datetime.time(hour=cleanup_hour, minute=cleanup_minute),
+                )
+                logger.info(
+                    f"已启动数据库定期清理任务（每天 {cleanup_hour:02d}:{cleanup_minute:02d} 执行）"
+                )
 
         logger.info("Banhammer Bot 启动成功！")
 

@@ -144,6 +144,20 @@ class Config:
         },
     }
 
+    # 数据库清理配置
+    DATABASE_CLEANUP_CONFIG = {
+        "enabled": True,  # 是否启用定期数据库清理
+        "hour": 3,  # 每日清理时间（小时，0-23）
+        "minute": 0,  # 每日清理时间（分钟，0-59）
+    }
+
+    # 数据库重试配置
+    DATABASE_RETRY_CONFIG = {
+        "max_retries": 3,  # 最大重试次数
+        "base_delay": 0.1,  # 基础延迟时间（秒）
+        "max_delay": 2.0,  # 最大延迟时间（秒）
+    }
+
 
 def validate_config() -> tuple[bool, list[str]]:
     """验证配置完整性

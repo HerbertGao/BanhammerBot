@@ -246,8 +246,10 @@ class DatabaseManager:
         self, chat_id: int, blacklist_type: str, content: str, created_by: int
     ) -> bool:
         """添加内容到群组黑名单（带 OperationalError 重试）"""
-        max_retries = 3
-        base_delay = 0.1
+        retry_config = Config.DATABASE_RETRY_CONFIG
+        max_retries = retry_config.get("max_retries", 3)
+        base_delay = retry_config.get("base_delay", 0.1)
+        max_delay = retry_config.get("max_delay", 2.0)
 
         for attempt in range(max_retries + 1):
             try:
@@ -279,7 +281,7 @@ class DatabaseManager:
                     return False
 
                 # 指数退避
-                delay = min(base_delay * (2**attempt), 2.0)
+                delay = min(base_delay * (2**attempt), max_delay)
                 logger.warning(
                     f"数据库操作错误（尝试 {attempt + 1}/{max_retries + 1}），"
                     f"{delay:.2f}s 后重试: {e}"
@@ -300,8 +302,10 @@ class DatabaseManager:
         self, blacklist_type: str, content: str, contributed_by: int
     ) -> bool:
         """添加内容到通用黑名单（带 OperationalError 重试）"""
-        max_retries = 3
-        base_delay = 0.1
+        retry_config = Config.DATABASE_RETRY_CONFIG
+        max_retries = retry_config.get("max_retries", 3)
+        base_delay = retry_config.get("base_delay", 0.1)
+        max_delay = retry_config.get("max_delay", 2.0)
 
         for attempt in range(max_retries + 1):
             try:
@@ -333,7 +337,7 @@ class DatabaseManager:
                     return False
 
                 # 指数退避
-                delay = min(base_delay * (2**attempt), 2.0)
+                delay = min(base_delay * (2**attempt), max_delay)
                 logger.warning(
                     f"数据库操作错误（尝试 {attempt + 1}/{max_retries + 1}），"
                     f"{delay:.2f}s 后重试: {e}"
