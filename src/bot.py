@@ -350,8 +350,8 @@ class BanhammerBot:
             return
 
         # 记录消息的基本信息用于诊断（仅在DEBUG模式下构建字典以提高性能）
-        # 使用Config判断是否为DEBUG模式，避免每次都构建字典
-        if Config.LOG_LEVEL == "DEBUG":
+        # 使用Config判断是否为DEBUG模式，避免每次都构建字典（不区分大小写）
+        if getattr(Config, "LOG_LEVEL", "").upper() == "DEBUG":
             msg_info = {
                 "has_text": bool(message.text),
                 "has_sticker": bool(message.sticker),
