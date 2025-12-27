@@ -445,3 +445,143 @@ class TestPrivateForward:
             # 应该返回 False（拒绝访问）
             result = await self.handler._is_bot_admin(user_id, context)
             assert result is False
+
+    @pytest.mark.asyncio
+    async def test_bot_admin_exempt_from_rate_limit(self):
+        """测试Bot管理员豁免速率限制 - 可以快速转发多条消息"""
+        from config import Config
+        from utils.rate_limiter import rate_limiter
+
+        # 清理速率限制记录
+        rate_limiter._records.clear()
+
+        # 创建一个贡献群组
+        group_id = -1001234567890
+        self.handler.db.update_group_settings(group_id, contribute_to_global=True)
+
+        # 确保速率限制已启用且管理员豁免已开启
+        original_enabled = Config.RATE_LIMIT_CONFIG["enabled"]
+        original_exempt = Config.RATE_LIMIT_CONFIG.get("exempt_admins", False)
+        Config.RATE_LIMIT_CONFIG["enabled"] = True
+        Config.RATE_LIMIT_CONFIG["exempt_admins"] = True
+
+        try:
+            # 模拟Bot管理员快速转发超过限制次数（默认限制是20次/300秒）
+            admin_user = User(id=999, first_name="Admin", is_bot=False)
+
+            with patch.object(self.handler, "_is_bot_admin", return_value=True):
+                with patch(
+                    "config.Config.PRIVATE_FORWARD_CONFIG",
+                    {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+                ):
+                    success_count = 0
+
+                    # 尝试转发30次（超过限制20次）
+                    for i in range(30):
+                        update = MagicMock(spec=Update)
+                        update.message = MagicMock(spec=Message)
+                        update.message.text = f"https://spam{i}.com"
+                        update.message.via_bot = None
+                        update.message.sticker = None
+                        update.message.animation = None
+                        update.message.forward_from = User(
+                            id=777 + i, first_name="Spammer", is_bot=False
+                        )
+                        update.message.from_user = admin_user
+                        update.message.chat = Chat(id=999, type="private", first_name="Admin")
+
+                        context = MagicMock()
+                        context.bot.send_message = AsyncMock()
+
+                        await self.handler.handle_private_forward(update, context)
+
+                        # 检查是否成功添加到黑名单
+                        if self.handler.db.check_blacklist(
+                            group_id, "link", f"https://spam{i}.com"
+                        ):
+                            success_count += 1
+
+                    # 验证所有30条都成功添加（Bot管理员不受速率限制）
+                    assert (
+                        success_count == 30
+                    ), f"Bot管理员应该成功处理所有30次转发，实际: {success_count}"
+
+        finally:
+            # 恢复原始配置
+            Config.RATE_LIMIT_CONFIG["enabled"] = original_enabled
+            Config.RATE_LIMIT_CONFIG["exempt_admins"] = original_exempt
+            rate_limiter._records.clear()
+
+    @pytest.mark.asyncio
+    async def test_non_bot_admin_rate_limited(self):
+        """测试非Bot管理员受速率限制（exempt_admins=False时）"""
+        from config import Config
+        from utils.rate_limiter import rate_limiter
+
+        # 清理速率限制记录
+        rate_limiter._records.clear()
+
+        # 创建一个贡献群组
+        group_id = -1001234567890
+        self.handler.db.update_group_settings(group_id, contribute_to_global=True)
+
+        # 确保速率限制已启用但管理员豁免已关闭
+        original_enabled = Config.RATE_LIMIT_CONFIG["enabled"]
+        original_exempt = Config.RATE_LIMIT_CONFIG.get("exempt_admins", False)
+        Config.RATE_LIMIT_CONFIG["enabled"] = True
+        Config.RATE_LIMIT_CONFIG["exempt_admins"] = False  # 关闭管理员豁免
+
+        try:
+            admin_user = User(id=999, first_name="Admin", is_bot=False)
+            success_count = 0
+            error_count = 0
+
+            with patch.object(self.handler, "_is_bot_admin", return_value=True):
+                with patch(
+                    "config.Config.PRIVATE_FORWARD_CONFIG",
+                    {"auto_add_to_contributing_groups": True, "auto_add_to_global": True},
+                ):
+                    # 尝试转发30次（超过限制20次/300秒）
+                    for i in range(30):
+                        update = MagicMock(spec=Update)
+                        update.message = MagicMock(spec=Message)
+                        update.message.text = f"https://spam{i}.com"
+                        update.message.via_bot = None
+                        update.message.sticker = None
+                        update.message.animation = None
+                        update.message.forward_from = User(
+                            id=777 + i, first_name="Spammer", is_bot=False
+                        )
+                        update.message.from_user = admin_user
+                        update.message.chat = Chat(id=999, type="private", first_name="Admin")
+
+                        context = MagicMock()
+                        context.bot.send_message = AsyncMock()
+
+                        await self.handler.handle_private_forward(update, context)
+
+                        # 检查是否成功添加到黑名单
+                        if self.handler.db.check_blacklist(
+                            group_id, "link", f"https://spam{i}.com"
+                        ):
+                            success_count += 1
+                        else:
+                            # 检查是否发送了错误消息（速率限制）
+                            if context.bot.send_message.called:
+                                call_args = context.bot.send_message.call_args
+                                if "频繁" in call_args.kwargs.get("text", ""):
+                                    error_count += 1
+
+                    # 验证只有前20条成功（受速率限制）
+                    assert (
+                        success_count == 20
+                    ), f"应该只能成功处理20次转发（速率限制），实际: {success_count}"
+
+                    # 验证后续请求被速率限制阻止
+                    assert error_count > 0, "应该有请求被速率限制阻止"
+
+        finally:
+            # 恢复原始配置
+            Config.RATE_LIMIT_CONFIG["enabled"] = original_enabled
+            Config.RATE_LIMIT_CONFIG["exempt_admins"] = original_exempt
+            rate_limiter._records.clear()
