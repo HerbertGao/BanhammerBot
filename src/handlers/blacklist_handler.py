@@ -53,6 +53,8 @@ class BlacklistHandler:
             return
 
         # 速率限制检查（管理员可豁免）
+        # 注意：is_admin 在权限检查后被重用于速率限制豁免判断
+        # 这样可以避免重复的数据库查询，提高性能
         if self.rate_limit_config["enabled"]:
             # 如果配置了管理员豁免且用户是管理员，跳过速率限制
             if self.rate_limit_config.get("exempt_admins", False) and is_admin:
@@ -445,12 +447,13 @@ class BlacklistHandler:
                 f"Bot Username: {message.via_bot.username}, "
                 f"群组: {message.chat.id}"
             )
-            if bot_id and self.db.check_blacklist(message.chat.id, "bot", bot_id):
-                logger.warning(f"via_bot {bot_id} 在群组黑名单中，准备处理违规")
-                await self._handle_blacklist_violation(message, context, "bot", bot_id, "group")
-                return True
-            else:
-                logger.debug(f"via_bot {bot_id} 不在群组黑名单中")
+            if bot_id:
+                if self.db.check_blacklist(message.chat.id, "bot", bot_id):
+                    logger.warning(f"via_bot {bot_id} 在群组黑名单中，准备处理违规")
+                    await self._handle_blacklist_violation(message, context, "bot", bot_id, "group")
+                    return True
+                else:
+                    logger.debug(f"via_bot {bot_id} 不在群组黑名单中")
 
         # 检查链接 - 只检查纯链接消息
         if message.text and self._is_only_link(message.text):

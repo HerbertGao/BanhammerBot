@@ -536,9 +536,9 @@ class TestSpamReport:
                     target_message.delete.assert_called_once()
 
                 # 验证所有10条都成功举报（管理员不受速率限制）
-                assert context.bot.ban_chat_member.call_count == 10, (
-                    f"管理员应该成功处理所有10次举报，实际: {context.bot.ban_chat_member.call_count}"
-                )
+                assert (
+                    context.bot.ban_chat_member.call_count == 10
+                ), f"管理员应该成功处理所有10次举报，实际: {context.bot.ban_chat_member.call_count}"
 
         finally:
             # 恢复原始配置
@@ -547,8 +547,8 @@ class TestSpamReport:
             rate_limiter._records.clear()
 
     @pytest.mark.asyncio
-    async def test_non_admin_rate_limited(self, sample_chat_id):
-        """测试非管理员受速率限制 - 超过限制后被阻止"""
+    async def test_admin_rate_limited_when_exemption_disabled(self, sample_chat_id):
+        """测试管理员在禁用豁免时受速率限制 - 超过限制后被阻止"""
         from config import Config
         from utils.rate_limiter import rate_limiter
 
@@ -562,9 +562,7 @@ class TestSpamReport:
         Config.RATE_LIMIT_CONFIG["exempt_admins"] = True
 
         try:
-            # 模拟普通用户（非管理员）尝试快速举报
-            # 注意：/spam 命令只有管理员能使用，这里测试的是即使是管理员
-            # 但如果exempt_admins=False，也应该受速率限制
+            # 测试场景：管理员在 exempt_admins=False 时也应受速率限制
             Config.RATE_LIMIT_CONFIG["exempt_admins"] = False
 
             with patch.object(self.handler, "_is_admin_or_creator", return_value=True):
@@ -572,7 +570,7 @@ class TestSpamReport:
                 context.bot.ban_chat_member = AsyncMock()
                 context.bot.send_message = AsyncMock(return_value=MagicMock())
 
-                user = User(id=888, first_name="User", is_bot=False)
+                admin_user = User(id=888, first_name="Admin", is_bot=False)
                 success_count = 0
 
                 # 尝试举报10次（超过限制5次/60秒）
@@ -592,7 +590,7 @@ class TestSpamReport:
                     update.message.reply_to_message = target_message
                     update.message.chat = MagicMock()
                     update.message.chat.id = sample_chat_id
-                    update.message.from_user = user
+                    update.message.from_user = admin_user
                     update.message.message_id = 1000 + i
                     update.message.delete = AsyncMock()
 
@@ -603,9 +601,9 @@ class TestSpamReport:
                         success_count = context.bot.ban_chat_member.call_count
 
                 # 验证只有前5次成功（受速率限制）
-                assert success_count == 5, (
-                    f"普通用户应该只能成功处理5次举报（速率限制），实际: {success_count}"
-                )
+                assert (
+                    success_count == 5
+                ), f"管理员在禁用豁免时应该只能成功处理5次举报（速率限制），实际: {success_count}"
 
                 # 验证最后几次调用发送了速率限制错误消息
                 # send_message 会被调用多次（成功消息+错误消息）

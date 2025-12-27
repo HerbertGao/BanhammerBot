@@ -496,13 +496,15 @@ class TestPrivateForward:
                         await self.handler.handle_private_forward(update, context)
 
                         # 检查是否成功添加到黑名单
-                        if self.handler.db.check_blacklist(group_id, "link", f"https://spam{i}.com"):
+                        if self.handler.db.check_blacklist(
+                            group_id, "link", f"https://spam{i}.com"
+                        ):
                             success_count += 1
 
                     # 验证所有30条都成功添加（Bot管理员不受速率限制）
-                    assert success_count == 30, (
-                        f"Bot管理员应该成功处理所有30次转发，实际: {success_count}"
-                    )
+                    assert (
+                        success_count == 30
+                    ), f"Bot管理员应该成功处理所有30次转发，实际: {success_count}"
 
         finally:
             # 恢复原始配置
@@ -559,7 +561,9 @@ class TestPrivateForward:
                         await self.handler.handle_private_forward(update, context)
 
                         # 检查是否成功添加到黑名单
-                        if self.handler.db.check_blacklist(group_id, "link", f"https://spam{i}.com"):
+                        if self.handler.db.check_blacklist(
+                            group_id, "link", f"https://spam{i}.com"
+                        ):
                             success_count += 1
                         else:
                             # 检查是否发送了错误消息（速率限制）
@@ -569,9 +573,9 @@ class TestPrivateForward:
                                     error_count += 1
 
                     # 验证只有前20条成功（受速率限制）
-                    assert success_count == 20, (
-                        f"应该只能成功处理20次转发（速率限制），实际: {success_count}"
-                    )
+                    assert (
+                        success_count == 20
+                    ), f"应该只能成功处理20次转发（速率限制），实际: {success_count}"
 
                     # 验证后续请求被速率限制阻止
                     assert error_count > 0, "应该有请求被速率限制阻止"
