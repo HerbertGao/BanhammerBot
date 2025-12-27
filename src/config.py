@@ -125,6 +125,7 @@ class Config:
     # 速率限制配置
     RATE_LIMIT_CONFIG = {
         "enabled": True,  # 是否启用速率限制
+        "exempt_admins": True,  # 管理员是否豁免速率限制（不受任何速率限制）
         "max_entries": 10000,  # 速率限制器最大记录数（防止内存无限增长）
         "spam_report": {
             "max_calls": 5,  # 最大调用次数

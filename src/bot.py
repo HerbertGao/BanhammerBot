@@ -349,6 +349,17 @@ class BanhammerBot:
         if not message:
             return
 
+        # 记录消息的基本信息用于诊断
+        msg_info = {
+            "has_text": bool(message.text),
+            "has_sticker": bool(message.sticker),
+            "has_animation": bool(message.animation),
+            "has_via_bot": bool(message.via_bot),
+            "via_bot_id": message.via_bot.id if message.via_bot else None,
+            "via_bot_username": message.via_bot.username if message.via_bot else None,
+        }
+        logger.debug(f"处理消息: {msg_info}")
+
         # 检查消息发送者是否存在（频道消息的from_user为None）
         if message.from_user:
             # 检查用户权限 - 管理员和群主的消息跳过检测

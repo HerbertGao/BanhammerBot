@@ -47,28 +47,33 @@ class BlacklistHandler:
             return
 
         # 检查权限
-        if not await self._is_admin_or_creator(message):
+        is_admin = await self._is_admin_or_creator(message)
+        if not is_admin:
             await self._send_error_message(message, context, "只有管理员可以使用此命令")
             return
 
-        # 速率限制检查
+        # 速率限制检查（管理员可豁免）
         if self.rate_limit_config["enabled"]:
-            spam_report_config = self.rate_limit_config["spam_report"]
-            if await rate_limiter.is_rate_limited(
-                message.from_user.id,
-                "spam_report",
-                spam_report_config["max_calls"],
-                spam_report_config["window_seconds"],
-            ):
-                remaining = await rate_limiter.get_remaining_time(
-                    message.from_user.id, "spam_report", spam_report_config["window_seconds"]
-                )
-                await self._send_error_message(
-                    message,
-                    context,
-                    f"操作过于频繁，请在 {remaining} 秒后再试",
-                )
-                return
+            # 如果配置了管理员豁免且用户是管理员，跳过速率限制
+            if self.rate_limit_config.get("exempt_admins", False) and is_admin:
+                logger.debug(f"管理员 {message.from_user.id} 豁免速率限制")
+            else:
+                spam_report_config = self.rate_limit_config["spam_report"]
+                if await rate_limiter.is_rate_limited(
+                    message.from_user.id,
+                    "spam_report",
+                    spam_report_config["max_calls"],
+                    spam_report_config["window_seconds"],
+                ):
+                    remaining = await rate_limiter.get_remaining_time(
+                        message.from_user.id, "spam_report", spam_report_config["window_seconds"]
+                    )
+                    await self._send_error_message(
+                        message,
+                        context,
+                        f"操作过于频繁，请在 {remaining} 秒后再试",
+                    )
+                    return
 
         target_message = message.reply_to_message
         blacklist_type, content = self._extract_blacklist_content(target_message)
@@ -435,9 +440,17 @@ class BlacklistHandler:
         # 检查内联Bot（优先级最高，因为代表消息来源）
         if message.via_bot:
             bot_id = str(message.via_bot.id)  # 转换为字符串以保持一致性
+            logger.info(
+                f"检测到 via_bot 消息 - Bot ID: {bot_id}, "
+                f"Bot Username: {message.via_bot.username}, "
+                f"群组: {message.chat.id}"
+            )
             if bot_id and self.db.check_blacklist(message.chat.id, "bot", bot_id):
+                logger.warning(f"via_bot {bot_id} 在群组黑名单中，准备处理违规")
                 await self._handle_blacklist_violation(message, context, "bot", bot_id, "group")
                 return True
+            else:
+                logger.debug(f"via_bot {bot_id} 不在群组黑名单中")
 
         # 检查链接 - 只检查纯链接消息
         if message.text and self._is_only_link(message.text):
@@ -1024,30 +1037,35 @@ class BlacklistHandler:
             return
 
         # 检查用户是否为Bot的管理员
-        if not await self._is_bot_admin(message.from_user.id, context):
+        is_bot_admin = await self._is_bot_admin(message.from_user.id, context)
+        if not is_bot_admin:
             await self._send_private_error_message(
                 message, context, "您没有权限使用此功能。只有Bot的管理员才能直接添加黑名单。"
             )
             return
 
-        # 速率限制检查
+        # 速率限制检查（Bot管理员可豁免）
         if self.rate_limit_config["enabled"]:
-            forward_config = self.rate_limit_config["private_forward"]
-            if await rate_limiter.is_rate_limited(
-                message.from_user.id,
-                "private_forward",
-                forward_config["max_calls"],
-                forward_config["window_seconds"],
-            ):
-                remaining = await rate_limiter.get_remaining_time(
-                    message.from_user.id, "private_forward", forward_config["window_seconds"]
-                )
-                await self._send_private_error_message(
-                    message,
-                    context,
-                    f"操作过于频繁，请在 {remaining} 秒后再试",
-                )
-                return
+            # 如果配置了管理员豁免且用户是Bot管理员，跳过速率限制
+            if self.rate_limit_config.get("exempt_admins", False) and is_bot_admin:
+                logger.debug(f"Bot管理员 {message.from_user.id} 豁免速率限制")
+            else:
+                forward_config = self.rate_limit_config["private_forward"]
+                if await rate_limiter.is_rate_limited(
+                    message.from_user.id,
+                    "private_forward",
+                    forward_config["max_calls"],
+                    forward_config["window_seconds"],
+                ):
+                    remaining = await rate_limiter.get_remaining_time(
+                        message.from_user.id, "private_forward", forward_config["window_seconds"]
+                    )
+                    await self._send_private_error_message(
+                        message,
+                        context,
+                        f"操作过于频繁，请在 {remaining} 秒后再试",
+                    )
+                    return
 
         # 提取黑名单内容
         blacklist_type, content = self._extract_blacklist_content(message)
