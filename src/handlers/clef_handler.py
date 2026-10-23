@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Optional
 
 from telegram import Chat, ChatMember, ChatMemberUpdated, Message, Update, User
@@ -33,11 +34,7 @@ def display_name(user: User) -> str:
 
 def build_join_state(nickname: str, bio: str) -> str:
     """入群评分 state。"""
-    return (
-        "Telegram 入群资料：\n"
-        f"昵称：{nickname or '（空）'}\n"
-        f"简介：{bio or '（空）'}"
-    )
+    return "Telegram 入群资料：\n" f"昵称：{nickname or '（空）'}\n" f"简介：{bio or '（空）'}"
 
 
 def build_message_state(nickname: str, bio: str, message_text: str) -> str:
@@ -70,9 +67,7 @@ class ClefHandler:
     def enabled(self) -> bool:
         return bool(Config.CLEF_ENABLED and self.client.is_configured())
 
-    async def handle_chat_member(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def handle_chat_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """处理 chat_member 入群事件。"""
         if not self.enabled:
             return
@@ -91,6 +86,9 @@ class ClefHandler:
         if not user or not chat:
             return
 
+        if getattr(chat, "type", None) not in ("group", "supergroup"):
+            return
+
         if user.is_bot:
             logger.debug(f"clef: 跳过机器人入群 user_id={user.id}")
             return
@@ -102,6 +100,11 @@ class ClefHandler:
             logger.debug(f"clef: 跳过管理员入群 user_id={user.id}")
             return
 
+        # 必须先于 join_scored：命中封禁会写下该标记，Telegram 侧解封后再入群仍要踢
+        if self.db.check_blacklist(chat.id, "user", str(user.id)):
+            await self._ban_listed_user(context, chat.id, user.id)
+            return
+
         if self.db.has_clef_join_scored(chat.id, user.id):
             logger.debug(f"clef: 入群已评过分 chat={chat.id} user={user.id}")
             return
@@ -111,9 +114,6 @@ class ClefHandler:
         state = build_join_state(nickname, bio)
 
         score = await self.client.score_profile(state)
-        # 无论成功与否都标记，避免 API 抖动时反复打分；fail-open 已在 client 内处理
-        self.db.mark_clef_join_scored(chat.id, user.id)
-
         if score is None:
             return
 
@@ -123,6 +123,7 @@ class ClefHandler:
         )
 
         if not score.should_auto_kick():
+            self.db.mark_clef_join_scored(chat.id, user.id)
             return
 
         # 尝试删除入群服务消息（chat_member 更新通常没有 message）
@@ -133,7 +134,7 @@ class ClefHandler:
             except Exception as e:
                 logger.debug(f"clef: 删除入群服务消息失败: {e}")
 
-        await self._ban_user(
+        if await self._ban_user(
             context=context,
             chat=chat,
             user=user,
@@ -144,7 +145,8 @@ class ClefHandler:
                 f"(is_ad={score.is_ad:.3f}, risk={score.risk_score:.2f})"
             ),
             action_type="clef_join_ban",
-        )
+        ):
+            self._mark_both_scored(chat.id, user.id)
 
     async def check_first_message(
         self, message: Message, context: ContextTypes.DEFAULT_TYPE
@@ -182,8 +184,6 @@ class ClefHandler:
         state = build_message_state(nickname, bio, text.strip())
 
         score = await self.client.score_profile(state)
-        self.db.mark_clef_message_scored(chat.id, user.id)
-
         if score is None:
             return False
 
@@ -193,6 +193,7 @@ class ClefHandler:
         )
 
         if not score.should_auto_kick():
+            self.db.mark_clef_message_scored(chat.id, user.id)
             return False
 
         # 删除消息并封禁
@@ -202,7 +203,7 @@ class ClefHandler:
         except Exception as e:
             logger.error(f"clef: 删除消息失败: {e}", exc_info=True)
 
-        await self._ban_user(
+        banned = await self._ban_user(
             context=context,
             chat=chat,
             user=user,
@@ -214,7 +215,28 @@ class ClefHandler:
             ),
             action_type="clef_message_ban",
         )
-        return True
+        if banned:
+            self._mark_both_scored(chat.id, user.id)
+        return banned
+
+    def _mark_both_scored(self, chat_id: int, user_id: int) -> None:
+        """封禁已经做出，两条路径都不再打分，否则 /unban 后会被另一条路径立刻打回。"""
+        self.db.mark_clef_join_scored(chat_id, user_id)
+        self.db.mark_clef_message_scored(chat_id, user_id)
+
+    async def _ban_listed_user(
+        self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int
+    ) -> None:
+        """已在本群 user 黑名单的人再次入群时直接封禁，不再调用 clef。"""
+        try:
+            until = (
+                Config.BLACKLIST_CONFIG["ban_duration"]
+                if Config.BLACKLIST_CONFIG.get("ban_duration", 0) > 0
+                else None
+            )
+            await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id, until_date=until)
+        except Exception as e:
+            logger.error(f"clef: 黑名单用户入群封禁失败 user={user_id}: {e}")
 
     async def _ban_user(
         self,
@@ -225,58 +247,30 @@ class ClefHandler:
         content: str,
         reason: str,
         action_type: str,
-    ) -> None:
-        """封禁用户、写入 user 黑名单，并可选记到日志频道。
+    ) -> bool:
+        """封禁用户并写入本群 user 黑名单。封禁成功返回 True。
 
-        黑名单策略（与 /spam 举报对齐）：
-        - 类型 ``user``，content 为 user_id 字符串
-        - 始终写入当前群组黑名单
-        - 若群组开启 contribute_to_global，同时写入通用黑名单
+        用户 ID 只进当前群。通用黑名单没有逐条删除，写进去后其他群无法撤销误伤。
         """
         user_content = str(user.id)
-        bl_reason = (
-            f"clef-flash 自动拉黑 (is_ad={score.is_ad:.3f}, "
-            f"risk={score.risk_score:.2f}) [{action_type}]"
-        )
 
-        # 1) 群组黑名单
         try:
-            self.db.add_to_blacklist(
+            added = self.db.add_to_blacklist(
                 chat_id=chat.id,
                 blacklist_type="user",
                 content=user_content,
                 created_by=context.bot.id,
             )
-            logger.info(
-                f"[CLEF_BLACKLIST] 已加入群组黑名单 type=user "
-                f"chat={chat.id} user={user.id} is_ad={score.is_ad:.4f}"
-            )
+            if added:
+                logger.info(
+                    f"[CLEF_BLACKLIST] 已加入群组黑名单 type=user "
+                    f"chat={chat.id} user={user.id} is_ad={score.is_ad:.4f}"
+                )
+            else:
+                logger.error(f"clef: 写入群组黑名单失败 user={user.id}")
         except Exception as e:
             logger.error(f"clef: 写入群组黑名单失败 user={user.id}: {e}", exc_info=True)
 
-        # 2) 通用黑名单（与 spam 举报相同：仅当群组开启贡献）
-        try:
-            group_settings = self.db.get_group_settings(chat.id)
-            if group_settings.get("contribute_to_global"):
-                self.db.add_to_global_blacklist(
-                    blacklist_type="user",
-                    content=user_content,
-                    contributed_by=chat.id,
-                )
-                self.db.add_action_log(
-                    chat_id=chat.id,
-                    action_type="global_contribution",
-                    user_id=context.bot.id,
-                    target_content=user_content,
-                    reason=bl_reason,
-                )
-                logger.info(
-                    f"[CLEF_BLACKLIST] 已贡献到通用黑名单 type=user user={user.id}"
-                )
-        except Exception as e:
-            logger.error(f"clef: 写入通用黑名单失败 user={user.id}: {e}", exc_info=True)
-
-        # 3) 封禁 + 记录
         try:
             until = (
                 Config.BLACKLIST_CONFIG["ban_duration"]
@@ -288,31 +282,30 @@ class ClefHandler:
                 user_id=user.id,
                 until_date=until,
             )
-
-            self.db.add_ban_record(
-                chat_id=chat.id,
-                user_id=user.id,
-                reason=reason,
-                banned_by=context.bot.id,
-            )
-            self.db.add_action_log(
-                chat_id=chat.id,
-                action_type=action_type,
-                user_id=user.id,
-                target_content=content,
-                reason=reason,
-            )
-
-            logger.info(
-                f"[CLEF_BAN] action={action_type} chat={chat.id} user={user.id} "
-                f"is_ad={score.is_ad:.4f} risk={score.risk_score:.4f}"
-            )
-
-            if Config.BLACKLIST_CONFIG.get("log_actions"):
-                await self._log_to_channel(context, chat, user, action_type, content, reason)
-
         except Exception as e:
             logger.error(f"clef: 封禁用户失败 user={user.id}: {e}", exc_info=True)
+            return False
+
+        self.db.add_ban_record(
+            chat_id=chat.id,
+            user_id=user.id,
+            reason=reason,
+            banned_by=context.bot.id,
+        )
+        self.db.add_action_log(
+            chat_id=chat.id,
+            action_type=action_type,
+            user_id=user.id,
+            target_content=content,
+            reason=reason,
+        )
+        logger.info(
+            f"[CLEF_BAN] action={action_type} chat={chat.id} user={user.id} "
+            f"is_ad={score.is_ad:.4f} risk={score.risk_score:.4f}"
+        )
+        if Config.BLACKLIST_CONFIG.get("log_actions"):
+            await self._log_to_channel(context, chat, user, action_type, content, reason)
+        return True
 
     async def _log_to_channel(
         self,
@@ -334,11 +327,11 @@ class ClefHandler:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_text = (
                 f"🔔 <b>操作记录</b>\n\n"
-                f"<b>来源群组</b>: {chat.title} (<code>{chat.id}</code>)\n"
+                f"<b>来源群组</b>: {escape(chat.title or '')} (<code>{chat.id}</code>)\n"
                 f"<b>用户</b>: {user.mention_html()} (<code>{user.id}</code>)\n"
-                f"<b>操作</b>: {action_type}\n"
-                f"<b>内容</b>: {content}\n"
-                f"<b>原因</b>: {reason}\n"
+                f"<b>操作</b>: {escape(action_type)}\n"
+                f"<b>内容</b>: {escape(content)}\n"
+                f"<b>原因</b>: {escape(reason)}\n"
                 f"<b>时间</b>: {current_time}"
             )
             await context.bot.send_message(

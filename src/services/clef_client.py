@@ -34,20 +34,27 @@ class ClefScore:
         return self.is_ad >= threshold
 
 
+def _read_number(value: Any) -> float | None:
+    """从 noul/score 对象、数字或数字字符串取 float。不抛异常。"""
+    if isinstance(value, dict):
+        if "noul" in value:
+            value = value.get("noul")
+        elif "score" in value:
+            value = value.get("score")
+        else:
+            return None
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_clef_response(payload: dict[str, Any]) -> Optional[ClefScore]:
     """从 Cloudflare API JSON 解析 ClefScore。
 
-    期望结构::
-
-        {
-          "success": true,
-          "result": {
-            "answers": {
-              "is_ad": {"type": "noul", "noul": 0.95},
-              "risk": {"type": "score", "score": 2.8}
-            }
-          }
-        }
+    踢人只看 is_ad。risk 缺失或畸形时记 0，不丢掉可用的 is_ad。
     """
     if not isinstance(payload, dict):
         return None
@@ -62,17 +69,13 @@ def parse_clef_response(payload: dict[str, Any]) -> Optional[ClefScore]:
     if not isinstance(answers, dict):
         return None
 
-    is_ad_ans = answers.get("is_ad") or {}
-    risk_ans = answers.get("risk") or {}
-
-    try:
-        is_ad = float(is_ad_ans.get("noul"))
-        risk_score = float(risk_ans.get("score"))
-    except (TypeError, ValueError):
+    is_ad = _read_number(answers.get("is_ad"))
+    if is_ad is None or not (0.0 <= is_ad <= 1.0):
         return None
 
-    if not (0.0 <= is_ad <= 1.0):
-        return None
+    risk_score = _read_number(answers.get("risk"))
+    if risk_score is None:
+        risk_score = 0.0
 
     return ClefScore(is_ad=is_ad, risk_score=risk_score)
 
@@ -150,9 +153,7 @@ class ClefClient:
             logger.warning("clef-flash 响应解析失败（fail-open）")
             return None
 
-        logger.debug(
-            f"clef-flash 评分: is_ad={score.is_ad:.4f} risk={score.risk_score:.4f}"
-        )
+        logger.debug(f"clef-flash 评分: is_ad={score.is_ad:.4f} risk={score.risk_score:.4f}")
         return score
 
 

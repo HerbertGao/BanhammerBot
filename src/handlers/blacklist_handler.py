@@ -697,6 +697,11 @@ class BlacklistHandler:
                 await context.bot.unban_chat_member(
                     chat_id=message.chat.id, user_id=user_id, only_if_banned=True
                 )
+                if not self.db.remove_from_blacklist(message.chat.id, "user", str(user_id)):
+                    await self._send_error_message(
+                        message, context, "已解除 Telegram 封禁，但未能移除用户黑名单"
+                    )
+                    return
 
                 # 记录操作
                 self.db.add_action_log(
@@ -966,9 +971,14 @@ class BlacklistHandler:
         )
 
         for blacklist_type, count in stats["type_stats"].items():
-            type_name = {"link": "链接", "sticker": "贴纸", "gif": "GIF", "bot": "Bot", "user": "用户", "text": "文字"}.get(
-                blacklist_type, blacklist_type
-            )
+            type_name = {
+                "link": "链接",
+                "sticker": "贴纸",
+                "gif": "GIF",
+                "bot": "Bot",
+                "user": "用户",
+                "text": "文字",
+            }.get(blacklist_type, blacklist_type)
             stats_text += f"• {type_name}: {count}个\n"
 
         if not stats["type_stats"]:

@@ -187,7 +187,6 @@ class Config:
         "max_delay": 2.0,  # 最大延迟时间（秒）
     }
 
-
     # Cloudflare Workers AI / clef-flash（中文区入群与首条广告检测）
     CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip() or None
     CLOUDFLARE_AI_TOKEN = os.getenv("CLOUDFLARE_AI_TOKEN", "").strip() or None
@@ -198,7 +197,8 @@ class Config:
         CLEF_ENABLED = _parse_bool_env("CLEF_ENABLED", False)
     else:
         CLEF_ENABLED = _clef_creds_ready
-    CLEF_AUTO_KICK_THRESHOLD = _parse_float_env("CLEF_AUTO_KICK_THRESHOLD", 0.85)
+    _clef_threshold = _parse_float_env("CLEF_AUTO_KICK_THRESHOLD", 0.85)
+    CLEF_AUTO_KICK_THRESHOLD = _clef_threshold if 0.0 < _clef_threshold <= 1.0 else 0.85
     CLEF_TIMEOUT = _parse_float_env("CLEF_TIMEOUT", 15.0)
 
 
@@ -243,7 +243,6 @@ def validate_config() -> tuple[bool, list[str]]:
             "私聊转发功能已启用，但 ADMIN_USER_IDS 未设置。" "建议设置管理员ID以接收转发消息"
         )
 
-
     # clef-flash：凭证不完整时提示
     has_cf_id = bool(Config.CLOUDFLARE_ACCOUNT_ID)
     has_cf_token = bool(Config.CLOUDFLARE_AI_TOKEN)
@@ -257,6 +256,17 @@ def validate_config() -> tuple[bool, list[str]]:
             "CLEF_ENABLED=true 但未配置 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_AI_TOKEN，"
             "入群广告检测将不会生效。"
         )
+    raw_threshold = os.getenv("CLEF_AUTO_KICK_THRESHOLD")
+    if raw_threshold is not None and str(raw_threshold).strip():
+        try:
+            parsed_threshold = float(str(raw_threshold).strip())
+            threshold_invalid = not (0.0 < parsed_threshold <= 1.0)
+        except ValueError:
+            threshold_invalid = True
+        if threshold_invalid:
+            warnings.append(
+                f"CLEF_AUTO_KICK_THRESHOLD={raw_threshold!r} 不在 (0, 1]，已改用 0.85。"
+            )
 
     # 合并错误和警告
     all_messages = []

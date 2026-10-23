@@ -403,12 +403,12 @@ class BanhammerBot:
             # 频道消息，继续进行黑名单检测
             logger.debug("检测到频道消息，继续黑名单检测")
 
-        # clef-flash：首条文本/说明消息检测（fail-open）
-        if self.clef_handler and await self.clef_handler.check_first_message(message, context):
+        # 先走已有黑名单，避免已拉黑用户等 clef 超时
+        if await self.blacklist_handler.check_blacklist(message, context):
             return
 
-        # 使用共享的黑名单处理器实例检查黑名单
-        if await self.blacklist_handler.check_blacklist(message, context):
+        # clef-flash：首条文本/说明消息检测（fail-open）
+        if self.clef_handler and await self.clef_handler.check_first_message(message, context):
             return
 
         # 检查 @admin 呼叫（仅文本消息）
