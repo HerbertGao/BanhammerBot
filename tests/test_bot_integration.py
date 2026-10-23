@@ -1,9 +1,11 @@
 """Bot集成测试"""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Chat, Message, Update, User
+from telegram import Chat, Message, PhotoSize, Update, User
+from telegram.ext import MessageHandler
 
 from bot import BanhammerBot
 
@@ -276,6 +278,25 @@ class TestBotIntegration:
             # 验证处理器被注册
             assert mock_application.add_handler.called
             assert mock_application.add_error_handler.called
+
+    def test_uncaptioned_photo_reaches_message_handler(self, bot_instance):
+        """无说明图片必须进消息处理，否则 user 黑名单查不到。"""
+        mock_application = MagicMock()
+        bot_instance._register_handlers(mock_application)
+        message = Message(
+            message_id=1,
+            date=datetime.now(timezone.utc),
+            chat=Chat(id=-100, type="supergroup"),
+            from_user=User(id=5, first_name="a", is_bot=False),
+            photo=(PhotoSize(file_id="f", file_unique_id="u", width=1, height=1),),
+        )
+        update = Update(update_id=1, message=message)
+        matched = [
+            call.args[0]
+            for call in mock_application.add_handler.call_args_list
+            if isinstance(call.args[0], MessageHandler) and call.args[0].check_update(update)
+        ]
+        assert matched
 
     def test_bot_stop(self, bot_instance):
         """测试Bot停止功能（异步方法正确执行）"""

@@ -97,6 +97,25 @@ ADMIN_USER_IDS=123456789,987654321
 5. 不同群组可以使用相同的记录频道
 6. 使用 `/log_channel clear` 清除记录频道设置
 
+
+### 7. Cloudflare clef-flash 入群广告检测（可选）
+
+用于识别中文区垃圾广告/引流号：入群时根据昵称+简介评分，首条文本/说明消息再评一次。`is_ad ≥ CLEF_AUTO_KICK_THRESHOLD`（默认 0.85）时自动删消息并封禁。API 失败时 **fail-open**（放行）。
+
+在 `.env` 中配置：
+
+```env
+CLOUDFLARE_ACCOUNT_ID=你的_Account_ID
+CLOUDFLARE_AI_TOKEN=带_Workers_AI_权限的_API_Token
+# 可选：CLEF_ENABLED=false 强制关闭
+# 可选：CLEF_AUTO_KICK_THRESHOLD=0.85
+# 可选：CLEF_TIMEOUT=15
+```
+
+Token **不要** 提交到仓库。Bot 需要能接收 `chat_member` 更新（代码已在 `run_polling` 中声明）。
+
+命中后会删除消息（若有）、封禁，并把用户 ID 写入当前群的 `user` 黑名单。`/unban` 会删掉这条记录。用户 ID 不进通用黑名单。接口失败只放行这一次，不会记成已评分。
+
 ### 6. 配置管理员权限（可选）
 
 1. 获取您的 Telegram 用户 ID（可以通过 @userinfobot 获取）

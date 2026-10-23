@@ -49,6 +49,35 @@ class TestBlacklistCommands:
             context.bot.send_message.assert_called()
 
     @pytest.mark.asyncio
+    async def test_unban_removes_user_blacklist(self, sample_chat_id):
+        """解封必须清掉 user 黑名单，否则下一条消息会把人再封回去。"""
+        user_id = 123456
+        self.handler.db.add_ban_record(
+            chat_id=sample_chat_id, user_id=user_id, reason="clef", banned_by=1
+        )
+        self.handler.db.add_to_blacklist(
+            chat_id=sample_chat_id,
+            blacklist_type="user",
+            content=str(user_id),
+            created_by=1,
+        )
+
+        update = MagicMock(spec=Update)
+        update.message = MagicMock(spec=Message)
+        update.message.text = f"/unban {user_id}"
+        update.message.chat = MagicMock()
+        update.message.chat.id = sample_chat_id
+        update.message.from_user = User(id=999, first_name="Admin", is_bot=False)
+
+        with patch.object(self.handler, "_is_admin_or_creator", return_value=True):
+            context = MagicMock()
+            context.bot.unban_chat_member = AsyncMock()
+            context.bot.send_message = AsyncMock()
+            await self.handler.handle_unban_command(update, context)
+
+        assert self.handler.db.check_blacklist(sample_chat_id, "user", str(user_id)) is False
+
+    @pytest.mark.asyncio
     async def test_handle_unban_command_not_admin(self, sample_chat_id):
         """测试非管理员解封"""
         update = MagicMock(spec=Update)

@@ -143,38 +143,33 @@ class DatabaseManager:
                 cursor = conn.cursor()
 
                 # 创建群组黑名单表
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS group_blacklists (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         chat_id INTEGER NOT NULL,
-                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot'
+                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot', 'text', 'user'
                         blacklist_content TEXT NOT NULL,  -- 具体内容
                         created_by INTEGER NOT NULL,  -- 创建者用户ID
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         UNIQUE(chat_id, blacklist_type, blacklist_content)
                     )
-                """
-                )
+                """)
 
                 # 创建通用黑名单表
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS global_blacklists (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot'
+                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot', 'text', 'user'
                         blacklist_content TEXT NOT NULL,  -- 具体内容
                         contributed_by INTEGER NOT NULL,  -- 贡献群组ID
                         contributed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         usage_count INTEGER DEFAULT 0,  -- 使用次数
                         UNIQUE(blacklist_type, blacklist_content)
                     )
-                """
-                )
+                """)
 
                 # 创建群组设置表
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS group_settings (
                         chat_id INTEGER PRIMARY KEY,
                         contribute_to_global BOOLEAN DEFAULT 0,  -- 是否贡献到通用黑名单
@@ -183,12 +178,10 @@ class DatabaseManager:
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                """
-                )
+                """)
 
                 # 创建封禁记录表
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS ban_records (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         chat_id INTEGER NOT NULL,
@@ -200,12 +193,10 @@ class DatabaseManager:
                         unbanned_by INTEGER NULL,
                         is_active BOOLEAN DEFAULT 1
                     )
-                """
-                )
+                """)
 
                 # 创建操作日志表
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS action_logs (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         chat_id INTEGER NOT NULL,
@@ -215,12 +206,10 @@ class DatabaseManager:
                         reason TEXT NULL,
                         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                """
-                )
+                """)
 
                 # 创建文字消息举报计数表
-                cursor.execute(
-                    """
+                cursor.execute("""
                     CREATE TABLE IF NOT EXISTS text_report_counts (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         chat_id INTEGER NOT NULL,
@@ -232,8 +221,18 @@ class DatabaseManager:
                         is_blacklisted BOOLEAN DEFAULT 0,  -- 是否已加入黑名单
                         UNIQUE(chat_id, user_id, message_hash)
                     )
-                """
-                )
+                """)
+
+                # 创建 clef-flash 入群/首条已评分记录（避免重复调用）
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS clef_scored_users (
+                        chat_id INTEGER NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        join_scored_at TIMESTAMP NULL,
+                        message_scored_at TIMESTAMP NULL,
+                        PRIMARY KEY (chat_id, user_id)
+                    )
+                """)
 
                 conn.commit()
                 logger.info("数据库初始化完成")
@@ -540,13 +539,11 @@ class DatabaseManager:
                 total_count = cursor.fetchone()[0]
 
                 # 按类型统计
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT blacklist_type, COUNT(*) 
                     FROM global_blacklists 
                     GROUP BY blacklist_type
-                """
-                )
+                """)
                 type_stats = dict(cursor.fetchall())
 
                 # 总使用次数
@@ -648,6 +645,86 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"添加封禁记录失败: {e}", exc_info=True)
             return 0
+
+    def get_clef_scored_user(self, chat_id: int, user_id: int) -> Optional[Dict]:
+        """获取用户在该群的 clef 评分记录。"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT chat_id, user_id, join_scored_at, message_scored_at
+                    FROM clef_scored_users
+                    WHERE chat_id = ? AND user_id = ?
+                    """,
+                    (chat_id, user_id),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return {
+                    "chat_id": row[0],
+                    "user_id": row[1],
+                    "join_scored_at": row[2],
+                    "message_scored_at": row[3],
+                }
+        except Exception as e:
+            logger.error(f"查询 clef_scored_users 失败: {e}", exc_info=True)
+            return None
+
+    def mark_clef_join_scored(self, chat_id: int, user_id: int) -> bool:
+        """标记已完成入群 clef 评分。"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO clef_scored_users (chat_id, user_id, join_scored_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                        join_scored_at = COALESCE(
+                            clef_scored_users.join_scored_at, CURRENT_TIMESTAMP
+                        )
+                    """,
+                    (chat_id, user_id),
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"标记 clef join_scored 失败: {e}", exc_info=True)
+            return False
+
+    def mark_clef_message_scored(self, chat_id: int, user_id: int) -> bool:
+        """标记已完成首条消息 clef 评分。"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO clef_scored_users (chat_id, user_id, message_scored_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                        message_scored_at = COALESCE(
+                            clef_scored_users.message_scored_at, CURRENT_TIMESTAMP
+                        )
+                    """,
+                    (chat_id, user_id),
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"标记 clef message_scored 失败: {e}", exc_info=True)
+            return False
+
+    def has_clef_message_scored(self, chat_id: int, user_id: int) -> bool:
+        """是否已对首条消息评过分。"""
+        record = self.get_clef_scored_user(chat_id, user_id)
+        return bool(record and record.get("message_scored_at"))
+
+    def has_clef_join_scored(self, chat_id: int, user_id: int) -> bool:
+        """是否已对入群资料评过分。"""
+        record = self.get_clef_scored_user(chat_id, user_id)
+        return bool(record and record.get("join_scored_at"))
 
     def unban_user(self, chat_id: int, user_id: int, unbanned_by: int) -> bool:
         """解除用户封禁"""
@@ -926,25 +1003,21 @@ class DatabaseManager:
                 cursor = conn.cursor()
 
                 # 清理群组黑名单中的无效项
-                cursor.execute(
-                    """
+                cursor.execute("""
                     DELETE FROM group_blacklists 
                     WHERE blacklist_content IS NULL 
                        OR blacklist_content = '' 
                        OR trim(blacklist_content) = ''
-                """
-                )
+                """)
                 group_deleted = cursor.rowcount
 
                 # 清理通用黑名单中的无效项
-                cursor.execute(
-                    """
+                cursor.execute("""
                     DELETE FROM global_blacklists 
                     WHERE blacklist_content IS NULL 
                        OR blacklist_content = '' 
                        OR trim(blacklist_content) = ''
-                """
-                )
+                """)
                 global_deleted = cursor.rowcount
 
                 conn.commit()
@@ -965,22 +1038,18 @@ class DatabaseManager:
                 cursor = conn.cursor()
 
                 # 获取所有基于set_name的Sticker黑名单项
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT id, chat_id, blacklist_content, created_by, created_at
                     FROM group_blacklists 
                     WHERE blacklist_type = 'sticker'
-                """
-                )
+                """)
                 group_stickers = cursor.fetchall()
 
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT id, blacklist_content, contributed_by, contributed_at
                     FROM global_blacklists 
                     WHERE blacklist_type = 'sticker'
-                """
-                )
+                """)
                 global_stickers = cursor.fetchall()
 
                 logger.info(
@@ -1002,12 +1071,10 @@ class DatabaseManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT chat_id FROM group_settings 
                     WHERE contribute_to_global = 1
-                """
-                )
+                """)
 
                 results = [row[0] for row in cursor.fetchall()]
                 logger.info(f"获取到 {len(results)} 个贡献群组")

@@ -2,12 +2,20 @@ import asyncio
 
 from telegram import Message, Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    ChatMemberHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from config import Config
 from database.models import DatabaseManager
 from handlers.admin_handler import AdminHandler
 from handlers.blacklist_handler import BlacklistHandler
+from handlers.clef_handler import ClefHandler
 from utils.logger import logger
 
 
@@ -24,6 +32,7 @@ class BanhammerBot:
         self.token = Config.BOT_TOKEN
         self.db = None
         self.blacklist_handler = None
+        self.clef_handler = None
         self.application = None
 
         if not self.token:
@@ -36,6 +45,8 @@ class BanhammerBot:
 
             # 初始化黑名单处理器 - 共享数据库连接
             self.blacklist_handler = BlacklistHandler(db=self.db)
+            # clef-flash 入群/首条广告检测
+            self.clef_handler = ClefHandler(db=self.db)
         except Exception as e:
             # 注意：DatabaseManager不维护持久连接，无需显式关闭
             logger.error(f"Bot初始化失败: {e}", exc_info=True)
@@ -80,9 +91,11 @@ class BanhammerBot:
 
         logger.info("Banhammer Bot 启动成功！")
 
-        # 简单启动
+        # 需要接收 chat_member（入群）与常规 message 更新
         try:
-            self.application.run_polling()
+            self.application.run_polling(
+                allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]
+            )
         except Exception as e:
             logger.error(f"Bot 运行出错: {e}", exc_info=True)
             raise
@@ -186,11 +199,35 @@ class BanhammerBot:
             MessageHandler(filters.ViaBot() & filters.ChatType.GROUPS, self._handle_message)
         )
 
+        # 注册带说明的群组媒体消息（供 clef 首条检测）
+        application.add_handler(
+            MessageHandler(
+                filters.Caption() & filters.ChatType.GROUPS & ~filters.COMMAND,
+                self._handle_message,
+            )
+        )
+
+        # 无说明的图片/视频/文件/语音也要查 user 黑名单
+        application.add_handler(
+            MessageHandler(
+                filters.ATTACHMENT & filters.ChatType.GROUPS & ~filters.COMMAND,
+                self._handle_message,
+            )
+        )
+
         # 注册私聊转发消息处理器 - 直接添加黑名单
         application.add_handler(
             MessageHandler(
                 filters.ChatType.PRIVATE & filters.FORWARDED,
                 self.blacklist_handler.handle_private_forward,
+            )
+        )
+
+        # clef-flash：入群 ChatMember 检测
+        application.add_handler(
+            ChatMemberHandler(
+                self.clef_handler.handle_chat_member,
+                chat_member_types=ChatMemberHandler.CHAT_MEMBER,
             )
         )
 
@@ -374,8 +411,12 @@ class BanhammerBot:
             # 频道消息，继续进行黑名单检测
             logger.debug("检测到频道消息，继续黑名单检测")
 
-        # 使用共享的黑名单处理器实例检查黑名单
+        # 先走已有黑名单，避免已拉黑用户等 clef 超时
         if await self.blacklist_handler.check_blacklist(message, context):
+            return
+
+        # clef-flash：首条文本/说明消息检测（fail-open）
+        if self.clef_handler and await self.clef_handler.check_first_message(message, context):
             return
 
         # 检查 @admin 呼叫（仅文本消息）
