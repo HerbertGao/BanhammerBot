@@ -207,6 +207,14 @@ class BanhammerBot:
             )
         )
 
+        # 无说明的图片/视频/文件/语音也要查 user 黑名单
+        application.add_handler(
+            MessageHandler(
+                filters.ATTACHMENT & filters.ChatType.GROUPS & ~filters.COMMAND,
+                self._handle_message,
+            )
+        )
+
         # 注册私聊转发消息处理器 - 直接添加黑名单
         application.add_handler(
             MessageHandler(

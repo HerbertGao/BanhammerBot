@@ -7,14 +7,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from services.clef_client import ClefClient, ClefScore, parse_clef_response
-from services.clef_prompt import IS_AD_INSTRUCTIONS, RISK_CRITERIA, build_questions
 from handlers.clef_handler import (
     build_join_state,
     build_message_state,
     display_name,
     is_join_transition,
 )
+from services.clef_client import ClefClient, ClefScore, parse_clef_response
+from services.clef_prompt import IS_AD_INSTRUCTIONS, RISK_CRITERIA, build_questions
 
 
 class TestParseClefResponse:

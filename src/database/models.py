@@ -662,7 +662,6 @@ class DatabaseManager:
             logger.error(f"添加封禁记录失败: {e}", exc_info=True)
             return 0
 
-
     def get_clef_scored_user(self, chat_id: int, user_id: int) -> Optional[Dict]:
         """获取用户在该群的 clef 评分记录。"""
         try:
