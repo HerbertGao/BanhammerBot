@@ -235,6 +235,19 @@ class DatabaseManager:
                 """
                 )
 
+                # 创建 clef-flash 入群/首条已评分记录（避免重复调用）
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS clef_scored_users (
+                        chat_id INTEGER NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        join_scored_at TIMESTAMP NULL,
+                        message_scored_at TIMESTAMP NULL,
+                        PRIMARY KEY (chat_id, user_id)
+                    )
+                """
+                )
+
                 conn.commit()
                 logger.info("数据库初始化完成")
 
@@ -648,6 +661,87 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"添加封禁记录失败: {e}", exc_info=True)
             return 0
+
+
+    def get_clef_scored_user(self, chat_id: int, user_id: int) -> Optional[Dict]:
+        """获取用户在该群的 clef 评分记录。"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT chat_id, user_id, join_scored_at, message_scored_at
+                    FROM clef_scored_users
+                    WHERE chat_id = ? AND user_id = ?
+                    """,
+                    (chat_id, user_id),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return {
+                    "chat_id": row[0],
+                    "user_id": row[1],
+                    "join_scored_at": row[2],
+                    "message_scored_at": row[3],
+                }
+        except Exception as e:
+            logger.error(f"查询 clef_scored_users 失败: {e}", exc_info=True)
+            return None
+
+    def mark_clef_join_scored(self, chat_id: int, user_id: int) -> bool:
+        """标记已完成入群 clef 评分。"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO clef_scored_users (chat_id, user_id, join_scored_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                        join_scored_at = COALESCE(
+                            clef_scored_users.join_scored_at, CURRENT_TIMESTAMP
+                        )
+                    """,
+                    (chat_id, user_id),
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"标记 clef join_scored 失败: {e}", exc_info=True)
+            return False
+
+    def mark_clef_message_scored(self, chat_id: int, user_id: int) -> bool:
+        """标记已完成首条消息 clef 评分。"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO clef_scored_users (chat_id, user_id, message_scored_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                        message_scored_at = COALESCE(
+                            clef_scored_users.message_scored_at, CURRENT_TIMESTAMP
+                        )
+                    """,
+                    (chat_id, user_id),
+                )
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"标记 clef message_scored 失败: {e}", exc_info=True)
+            return False
+
+    def has_clef_message_scored(self, chat_id: int, user_id: int) -> bool:
+        """是否已对首条消息评过分。"""
+        record = self.get_clef_scored_user(chat_id, user_id)
+        return bool(record and record.get("message_scored_at"))
+
+    def has_clef_join_scored(self, chat_id: int, user_id: int) -> bool:
+        """是否已对入群资料评过分。"""
+        record = self.get_clef_scored_user(chat_id, user_id)
+        return bool(record and record.get("join_scored_at"))
 
     def unban_user(self, chat_id: int, user_id: int, unbanned_by: int) -> bool:
         """解除用户封禁"""

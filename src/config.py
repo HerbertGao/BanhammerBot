@@ -71,6 +71,34 @@ def _parse_admin_user_ids():
     return admin_ids
 
 
+def _parse_bool_env(name: str, default: bool) -> bool:
+    """解析布尔环境变量。
+
+    接受 true/1/yes/on 与 false/0/no/off（大小写不敏感）。
+    未设置时返回 default。
+    """
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _parse_float_env(name: str, default: float) -> float:
+    """解析浮点环境变量，非法值回退 default。"""
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return float(str(raw).strip())
+    except ValueError:
+        return default
+
+
 class Config:
     """Bot 配置类"""
 
@@ -160,6 +188,20 @@ class Config:
     }
 
 
+    # Cloudflare Workers AI / clef-flash（中文区入群与首条广告检测）
+    CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip() or None
+    CLOUDFLARE_AI_TOKEN = os.getenv("CLOUDFLARE_AI_TOKEN", "").strip() or None
+    # CLEF_ENABLED：显式 false 关闭；未设置时仅在 Account ID + Token 都有时默认开启
+    _clef_creds_ready = bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN)
+    _clef_enabled_raw = os.getenv("CLEF_ENABLED")
+    if _clef_enabled_raw is not None and str(_clef_enabled_raw).strip() != "":
+        CLEF_ENABLED = _parse_bool_env("CLEF_ENABLED", False)
+    else:
+        CLEF_ENABLED = _clef_creds_ready
+    CLEF_AUTO_KICK_THRESHOLD = _parse_float_env("CLEF_AUTO_KICK_THRESHOLD", 0.85)
+    CLEF_TIMEOUT = _parse_float_env("CLEF_TIMEOUT", 15.0)
+
+
 def validate_config() -> tuple[bool, list[str]]:
     """验证配置完整性
 
@@ -199,6 +241,21 @@ def validate_config() -> tuple[bool, list[str]]:
     ):
         warnings.append(
             "私聊转发功能已启用，但 ADMIN_USER_IDS 未设置。" "建议设置管理员ID以接收转发消息"
+        )
+
+
+    # clef-flash：凭证不完整时提示
+    has_cf_id = bool(Config.CLOUDFLARE_ACCOUNT_ID)
+    has_cf_token = bool(Config.CLOUDFLARE_AI_TOKEN)
+    if has_cf_id != has_cf_token:
+        warnings.append(
+            "Cloudflare clef-flash 凭证不完整：需要同时设置 "
+            "CLOUDFLARE_ACCOUNT_ID 与 CLOUDFLARE_AI_TOKEN（或设置 CLEF_ENABLED=false）。"
+        )
+    elif Config.CLEF_ENABLED and not (has_cf_id and has_cf_token):
+        warnings.append(
+            "CLEF_ENABLED=true 但未配置 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_AI_TOKEN，"
+            "入群广告检测将不会生效。"
         )
 
     # 合并错误和警告
