@@ -225,3 +225,139 @@ class TestClefDbHelpers:
 
         # 再次标记不报错
         assert db.mark_clef_join_scored(chat_id, user_id) is True
+
+
+
+@pytest.mark.asyncio
+class TestClefBanAddsBlacklist:
+    """clef 命中阈值时应写入 user 黑名单（群组 + 可选通用）。"""
+
+    async def test_ban_user_adds_group_blacklist(self, temp_db_path):
+        from database.models import DatabaseManager
+        from handlers.clef_handler import ClefHandler
+        from services.clef_client import ClefScore
+
+        db = DatabaseManager(db_path=temp_db_path)
+        handler = ClefHandler(db=db)
+
+        chat = MagicMock()
+        chat.id = -100999
+        chat.title = "Test Group"
+
+        user = MagicMock()
+        user.id = 424242
+        user.username = "spammer"
+        user.mention_html = MagicMock(return_value='<a href="tg://user?id=424242">spammer</a>')
+
+        context = MagicMock()
+        context.bot.id = 1
+        context.bot.ban_chat_member = AsyncMock()
+        context.bot.send_message = AsyncMock()
+
+        score = ClefScore(is_ad=0.93, risk_score=2.7)
+        await handler._ban_user(
+            context=context,
+            chat=chat,
+            user=user,
+            score=score,
+            content="nick=x",
+            reason="clef-flash 入群检测命中 (is_ad=0.930, risk=2.70)",
+            action_type="clef_join_ban",
+        )
+
+        assert db.check_blacklist(chat.id, "user", "424242") is True
+        assert db.check_global_blacklist("user", "424242") is False  # 未开贡献
+        context.bot.ban_chat_member.assert_awaited()
+
+    async def test_ban_user_contributes_global_when_enabled(self, temp_db_path):
+        from database.models import DatabaseManager
+        from handlers.clef_handler import ClefHandler
+        from services.clef_client import ClefScore
+
+        db = DatabaseManager(db_path=temp_db_path)
+        chat_id = -100888
+        db.update_group_settings(chat_id, contribute_to_global=True)
+
+        handler = ClefHandler(db=db)
+
+        chat = MagicMock()
+        chat.id = chat_id
+        chat.title = "Contributing"
+
+        user = MagicMock()
+        user.id = 777
+        user.username = "ad"
+        user.mention_html = MagicMock(return_value="ad")
+
+        context = MagicMock()
+        context.bot.id = 1
+        context.bot.ban_chat_member = AsyncMock()
+        context.bot.send_message = AsyncMock()
+
+        score = ClefScore(is_ad=0.96, risk_score=2.9)
+        await handler._ban_user(
+            context=context,
+            chat=chat,
+            user=user,
+            score=score,
+            content="msg",
+            reason="clef-flash 首条消息检测命中 (is_ad=0.960, risk=2.90)",
+            action_type="clef_message_ban",
+        )
+
+        assert db.check_blacklist(chat_id, "user", "777") is True
+        assert db.check_global_blacklist("user", "777") is True
+
+    async def test_check_first_message_triggers_blacklist(self, temp_db_path):
+        """首条消息超阈值整条路径应加黑名单。"""
+        from database.models import DatabaseManager
+        from handlers.clef_handler import ClefHandler
+        from services.clef_client import ClefClient, ClefScore
+
+        db = DatabaseManager(db_path=temp_db_path)
+        client = ClefClient(account_id="a", api_token="t", enabled=True)
+        client.score_profile = AsyncMock(return_value=ClefScore(0.92, 2.6))
+
+        handler = ClefHandler(db=db, client=client)
+
+        message = MagicMock()
+        message.from_user = MagicMock()
+        message.from_user.id = 555
+        message.from_user.is_bot = False
+        message.from_user.first_name = "Ad"
+        message.from_user.last_name = "Bot"
+        message.from_user.username = "adbot"
+        message.from_user.mention_html = MagicMock(return_value="ad")
+        message.chat = MagicMock()
+        message.chat.id = -100555
+        message.chat.title = "G"
+        message.text = "加群看项目 日赚10000"
+        message.caption = None
+        message.message_id = 9
+        message.delete = AsyncMock()
+
+        context = MagicMock()
+        context.bot.id = 1
+        context.bot.get_chat = AsyncMock(side_effect=Exception("no bio"))
+        context.bot.get_chat_member = AsyncMock(
+            return_value=MagicMock(status="member")
+        )
+        context.bot.ban_chat_member = AsyncMock()
+        context.bot.send_message = AsyncMock()
+
+        with patch("handlers.clef_handler.Config") as cfg:
+            cfg.CLEF_ENABLED = True
+            cfg.CLEF_AUTO_KICK_THRESHOLD = 0.85
+            cfg.BLACKLIST_CONFIG = {
+                "ban_duration": 0,
+                "log_actions": False,
+                "auto_ban_on_blacklist": True,
+            }
+            # client.is_configured uses Config too via enabled flag on instance
+            hit = await handler.check_first_message(message, context)
+
+        assert hit is True
+        assert db.check_blacklist(-100555, "user", "555") is True
+        message.delete.assert_awaited()
+        context.bot.ban_chat_member.assert_awaited()
+

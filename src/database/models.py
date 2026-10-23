@@ -148,7 +148,7 @@ class DatabaseManager:
                     CREATE TABLE IF NOT EXISTS group_blacklists (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         chat_id INTEGER NOT NULL,
-                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot'
+                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot', 'text', 'user'
                         blacklist_content TEXT NOT NULL,  -- 具体内容
                         created_by INTEGER NOT NULL,  -- 创建者用户ID
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -162,7 +162,7 @@ class DatabaseManager:
                     """
                     CREATE TABLE IF NOT EXISTS global_blacklists (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot'
+                        blacklist_type TEXT NOT NULL,  -- 'link', 'sticker', 'gif', 'bot', 'text', 'user'
                         blacklist_content TEXT NOT NULL,  -- 具体内容
                         contributed_by INTEGER NOT NULL,  -- 贡献群组ID
                         contributed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

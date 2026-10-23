@@ -226,7 +226,57 @@ class ClefHandler:
         reason: str,
         action_type: str,
     ) -> None:
-        """封禁用户并写库 / 可选记到日志频道。"""
+        """封禁用户、写入 user 黑名单，并可选记到日志频道。
+
+        黑名单策略（与 /spam 举报对齐）：
+        - 类型 ``user``，content 为 user_id 字符串
+        - 始终写入当前群组黑名单
+        - 若群组开启 contribute_to_global，同时写入通用黑名单
+        """
+        user_content = str(user.id)
+        bl_reason = (
+            f"clef-flash 自动拉黑 (is_ad={score.is_ad:.3f}, "
+            f"risk={score.risk_score:.2f}) [{action_type}]"
+        )
+
+        # 1) 群组黑名单
+        try:
+            self.db.add_to_blacklist(
+                chat_id=chat.id,
+                blacklist_type="user",
+                content=user_content,
+                created_by=context.bot.id,
+            )
+            logger.info(
+                f"[CLEF_BLACKLIST] 已加入群组黑名单 type=user "
+                f"chat={chat.id} user={user.id} is_ad={score.is_ad:.4f}"
+            )
+        except Exception as e:
+            logger.error(f"clef: 写入群组黑名单失败 user={user.id}: {e}", exc_info=True)
+
+        # 2) 通用黑名单（与 spam 举报相同：仅当群组开启贡献）
+        try:
+            group_settings = self.db.get_group_settings(chat.id)
+            if group_settings.get("contribute_to_global"):
+                self.db.add_to_global_blacklist(
+                    blacklist_type="user",
+                    content=user_content,
+                    contributed_by=chat.id,
+                )
+                self.db.add_action_log(
+                    chat_id=chat.id,
+                    action_type="global_contribution",
+                    user_id=context.bot.id,
+                    target_content=user_content,
+                    reason=bl_reason,
+                )
+                logger.info(
+                    f"[CLEF_BLACKLIST] 已贡献到通用黑名单 type=user user={user.id}"
+                )
+        except Exception as e:
+            logger.error(f"clef: 写入通用黑名单失败 user={user.id}: {e}", exc_info=True)
+
+        # 3) 封禁 + 记录
         try:
             until = (
                 Config.BLACKLIST_CONFIG["ban_duration"]

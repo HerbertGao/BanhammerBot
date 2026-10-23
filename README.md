@@ -114,6 +114,8 @@ CLOUDFLARE_AI_TOKEN=带_Workers_AI_权限的_API_Token
 
 Token **不要** 提交到仓库。Bot 需要能接收 `chat_member` 更新（代码已在 `run_polling` 中声明）。
 
+命中后会：删除消息（若有）、封禁用户，并以黑名单类型 `user`（content=用户ID）写入当前群组黑名单；若该群开启了「贡献通用黑名单」，会同步写入通用黑名单（与 `/spam` 一致）。
+
 ### 6. 配置管理员权限（可选）
 
 1. 获取您的 Telegram 用户 ID（可以通过 @userinfobot 获取）

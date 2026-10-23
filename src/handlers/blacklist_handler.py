@@ -439,6 +439,15 @@ class BlacklistHandler:
         self, message: Message, context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
         """检查群组黑名单"""
+        # 检查用户 ID 黑名单（clef-flash / 手动拉黑的广告号）
+        if message.from_user:
+            user_id_str = str(message.from_user.id)
+            if self.db.check_blacklist(message.chat.id, "user", user_id_str):
+                await self._handle_blacklist_violation(
+                    message, context, "user", user_id_str, "group"
+                )
+                return True
+
         # 检查内联Bot（优先级最高，因为代表消息来源）
         if message.via_bot:
             bot_id = str(message.via_bot.id)  # 转换为字符串以保持一致性
@@ -495,6 +504,16 @@ class BlacklistHandler:
         self, message: Message, context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
         """检查通用黑名单"""
+        # 检查用户 ID 黑名单
+        if message.from_user:
+            user_id_str = str(message.from_user.id)
+            if self.db.check_global_blacklist("user", user_id_str):
+                self.db.increment_global_blacklist_usage("user", user_id_str)
+                await self._handle_blacklist_violation(
+                    message, context, "user", user_id_str, "global"
+                )
+                return True
+
         # 检查内联Bot（优先级最高，因为代表消息来源）
         if message.via_bot:
             bot_id = str(message.via_bot.id)  # 转换为字符串以保持一致性
@@ -947,7 +966,7 @@ class BlacklistHandler:
         )
 
         for blacklist_type, count in stats["type_stats"].items():
-            type_name = {"link": "链接", "sticker": "贴纸", "gif": "GIF", "bot": "Bot"}.get(
+            type_name = {"link": "链接", "sticker": "贴纸", "gif": "GIF", "bot": "Bot", "user": "用户", "text": "文字"}.get(
                 blacklist_type, blacklist_type
             )
             stats_text += f"• {type_name}: {count}个\n"
@@ -1124,6 +1143,7 @@ class BlacklistHandler:
             "gif": "GIF",
             "bot": "内联Bot",
             "text": "文字消息",
+            "user": "用户",
         }
 
         type_name = type_names.get(blacklist_type, blacklist_type)
