@@ -415,7 +415,7 @@ class BanhammerBot:
         if await self.blacklist_handler.check_blacklist(message, context):
             return
 
-        # clef-flash：首条文本/说明消息检测（fail-open）
+        # clef-flash：首条文本/说明，或无字贴纸的包标题（fail-open，不识图）
         if self.clef_handler and await self.clef_handler.check_first_message(message, context):
             return
 

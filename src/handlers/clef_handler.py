@@ -1,4 +1,8 @@
-"""Cloudflare clef-flash 入群资料与首条消息广告检测。"""
+"""Cloudflare clef-flash 入群资料与首条消息广告检测。
+
+首条消息包括文本/说明。没有文字、只有贴纸且带 set_name 时，用贴纸包标题
+（可附带 set_name）当作正文，不识别贴纸画面。
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from telegram.ext import ContextTypes
 from config import Config
 from database.models import DatabaseManager
 from services.clef_client import ClefClient, ClefScore, clef_client
+from services.sticker_set_cache import lookup_sticker_set_title
 from utils.logger import logger
 
 # 视为「新加入」的目标状态
@@ -45,6 +50,39 @@ def build_message_state(nickname: str, bio: str, message_text: str) -> str:
         f"简介：{bio or '（空）'}\n"
         f"消息：{message_text or '（空）'}"
     )
+
+
+def plain_message_text(message: Message) -> str:
+    """文本或说明。贴纸本身没有正文。"""
+    raw = message.text or message.caption
+    if not isinstance(raw, str):
+        return ""
+    return raw.strip()
+
+
+def sticker_set_name(message: Message) -> str:
+    """贴纸所属贴纸包的短名。自定义贴纸没有 set_name。"""
+    sticker = getattr(message, "sticker", None)
+    if sticker is None:
+        return ""
+    name = getattr(sticker, "set_name", None)
+    if not isinstance(name, str):
+        return ""
+    return name.strip()
+
+
+def format_sticker_set_message(title: str, set_name: str = "") -> str:
+    """把贴纸包标题当作消息正文，标题里还没有 set_name 时附在后面。
+
+    没有标题就返回空串，调用方应跳过，不要用 set_name 猜广告。
+    """
+    cleaned_title = (title or "").strip()
+    cleaned_name = (set_name or "").strip()
+    if not cleaned_title:
+        return ""
+    if cleaned_name and cleaned_name not in cleaned_title:
+        return f"{cleaned_title}（{cleaned_name}）"
+    return cleaned_title
 
 
 def is_join_transition(old_status: str, new_status: str) -> bool:
@@ -151,34 +189,80 @@ class ClefHandler:
     async def check_first_message(
         self, message: Message, context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
-        """检查群组首条文本/说明消息。
+        """检查群组首条消息。
+
+        有文本或说明时用原文。没有文字但贴纸带 set_name 时，用贴纸包标题
+        （可附带 set_name）当作正文。无 set_name，或 getStickerSet 失败，则跳过。
+        命中后的删消息、本群封禁、本群 user 黑名单与现有首条相同，不把 set_name
+        写入贴纸黑名单。
 
         Returns:
             True 表示已处理（命中并封禁），调用方应停止后续逻辑。
         """
-        if not self.enabled:
+        prepared = await self._prepare_first_message(message, context)
+        if prepared is None:
             return False
+        user, chat, text = prepared
+        return await self._enforce_first_message_score(message, context, user, chat, text)
 
-        if not message or not message.from_user or not message.chat:
-            return False
+    def _first_message_subject(self, message: Message) -> Optional[tuple[User, Chat, str]]:
+        """返回 (user, chat, 原文)。原文可为空，留给贴纸包标题。不符合则 None。"""
+        if not self.enabled:
+            return None
+        if message is None or message.from_user is None or message.chat is None:
+            return None
 
         user = message.from_user
         chat = message.chat
-
         if user.is_bot:
-            return False
+            return None
 
-        # 仅文本或带 caption 的消息
-        text = message.text or message.caption
-        if not text or not str(text).strip():
-            return False
+        text = plain_message_text(message)
+        if text or sticker_set_name(message):
+            return user, chat, text
+        return None
+
+    async def _prepare_first_message(
+        self, message: Message, context: ContextTypes.DEFAULT_TYPE
+    ) -> Optional[tuple[User, Chat, str]]:
+        """解析出要评分的正文。跳过时返回 None，且不标记已评分。"""
+        subject = self._first_message_subject(message)
+        if subject is None:
+            return None
+        user, chat, text = subject
 
         if await self._is_admin(chat.id, user.id, context):
-            return False
-
+            return None
         if self.db.has_clef_message_scored(chat.id, user.id):
-            return False
+            return None
+        if text:
+            return user, chat, text
 
+        text = await self._sticker_message_text(message, context)
+        if not text:
+            return None
+        return user, chat, text
+
+    async def _sticker_message_text(
+        self, message: Message, context: ContextTypes.DEFAULT_TYPE
+    ) -> str:
+        """无字贴纸：用包标题当正文。拿不到标题则空串（fail-open）。"""
+        set_name = sticker_set_name(message)
+        title = await lookup_sticker_set_title(context.bot, set_name)
+        if not title:
+            return ""
+        logger.debug(f"clef: 贴纸包标题作为首条正文 set={set_name}")
+        return format_sticker_set_message(title, set_name)
+
+    async def _enforce_first_message_score(
+        self,
+        message: Message,
+        context: ContextTypes.DEFAULT_TYPE,
+        user: User,
+        chat: Chat,
+        text: str,
+    ) -> bool:
+        """评分并按现有首条规则处理：未命中只标记消息已评分，命中则删消息并封禁。"""
         nickname = display_name(user)
         bio = await self._fetch_bio(user.id, context)
         state = build_message_state(nickname, bio, text.strip())
@@ -196,7 +280,6 @@ class ClefHandler:
             self.db.mark_clef_message_scored(chat.id, user.id)
             return False
 
-        # 删除消息并封禁
         try:
             await message.delete()
             logger.info(f"clef: 已删除首条广告消息 message_id={message.message_id}")
