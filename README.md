@@ -100,7 +100,7 @@ ADMIN_USER_IDS=123456789,987654321
 
 ### 7. Cloudflare clef-flash 入群广告检测（可选）
 
-用于识别中文区垃圾广告/引流号：入群时根据昵称+简介评分，首条文本/说明消息再评一次。`is_ad ≥ CLEF_AUTO_KICK_THRESHOLD`（默认 0.85）时自动删消息并封禁。API 失败时 **fail-open**（放行）。
+用于识别中文区垃圾广告/引流号：入群时根据昵称+简介评分；首条文本或说明再评一次。没有文字、只有贴纸、且贴纸带 `set_name` 时，调用 `getStickerSet` 把包标题（可附带 set_name）当作消息正文评分，不识别贴纸画面。没有 `set_name` 的自定义贴纸，或取标题失败，则跳过。`is_ad ≥ CLEF_AUTO_KICK_THRESHOLD`（默认 0.85）时自动删消息并封禁。API 失败时 **fail-open**（放行）。
 
 在 `.env` 中配置：
 
@@ -114,7 +114,7 @@ CLOUDFLARE_AI_TOKEN=带_Workers_AI_权限的_API_Token
 
 Token **不要** 提交到仓库。Bot 需要能接收 `chat_member` 更新（代码已在 `run_polling` 中声明）。
 
-命中后会删除消息（若有）、封禁，并把用户 ID 写入当前群的 `user` 黑名单。`/unban` 会删掉这条记录。用户 ID 不进通用黑名单。接口失败只放行这一次，不会记成已评分。
+命中后会删除消息（若有）、封禁，并把用户 ID 写入当前群的 `user` 黑名单，不会把贴纸包 `set_name` 写入贴纸黑名单。`/unban` 会删掉这条记录。用户 ID 不进通用黑名单。接口失败只放行这一次，不会记成已评分。同一贴纸包的标题在进程内按 `set_name` 缓存（TTL + LRU），避免重复请求。
 
 ### 6. 配置管理员权限（可选）
 
