@@ -100,7 +100,7 @@ ADMIN_USER_IDS=123456789,987654321
 
 ### 7. Cloudflare clef-flash 入群广告检测（可选）
 
-用于识别中文区垃圾广告/引流号：入群时根据昵称+简介评分；首条文本或说明再评一次。没有文字、只有贴纸、且贴纸带 `set_name` 时，调用 `getStickerSet` 把包标题（可附带 set_name）当作消息正文评分，不识别贴纸画面。没有 `set_name` 的自定义贴纸，或取标题失败，则跳过。`is_ad ≥ CLEF_AUTO_KICK_THRESHOLD`（默认 0.85）时自动删消息并封禁。API 失败时 **fail-open**（放行）。
+用于识别中文区垃圾广告/引流号：入群时根据昵称+简介评分；首条文本或说明再评一次。没有文字、只有贴纸、且贴纸带 `set_name` 时，调用 `getStickerSet` 把包标题（可附带 set_name）当作消息正文评分，不识别贴纸画面。没有 `set_name` 的自定义贴纸，或取标题失败，则跳过。`is_ad ≥ CLEF_AUTO_KICK_THRESHOLD`（默认 0.80）时自动删消息并封禁。API 失败时 **fail-open**（放行）。
 
 在 `.env` 中配置：
 
@@ -108,7 +108,7 @@ ADMIN_USER_IDS=123456789,987654321
 CLOUDFLARE_ACCOUNT_ID=你的_Account_ID
 CLOUDFLARE_AI_TOKEN=带_Workers_AI_权限的_API_Token
 # 可选：CLEF_ENABLED=false 强制关闭
-# 可选：CLEF_AUTO_KICK_THRESHOLD=0.85
+# 可选：CLEF_AUTO_KICK_THRESHOLD=0.80
 # 可选：CLEF_TIMEOUT=15
 ```
 

@@ -197,8 +197,8 @@ class Config:
         CLEF_ENABLED = _parse_bool_env("CLEF_ENABLED", False)
     else:
         CLEF_ENABLED = _clef_creds_ready
-    _clef_threshold = _parse_float_env("CLEF_AUTO_KICK_THRESHOLD", 0.85)
-    CLEF_AUTO_KICK_THRESHOLD = _clef_threshold if 0.0 < _clef_threshold <= 1.0 else 0.85
+    _clef_threshold = _parse_float_env("CLEF_AUTO_KICK_THRESHOLD", 0.80)
+    CLEF_AUTO_KICK_THRESHOLD = _clef_threshold if 0.0 < _clef_threshold <= 1.0 else 0.80
     CLEF_TIMEOUT = _parse_float_env("CLEF_TIMEOUT", 15.0)
 
 
@@ -265,7 +265,7 @@ def validate_config() -> tuple[bool, list[str]]:
             threshold_invalid = True
         if threshold_invalid:
             warnings.append(
-                f"CLEF_AUTO_KICK_THRESHOLD={raw_threshold!r} 不在 (0, 1]，已改用 0.85。"
+                f"CLEF_AUTO_KICK_THRESHOLD={raw_threshold!r} 不在 (0, 1]，已改用 0.80。"
             )
 
     # 合并错误和警告
