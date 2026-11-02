@@ -14,7 +14,12 @@ from handlers.clef_handler import (
     is_join_transition,
 )
 from services.clef_client import ClefClient, ClefScore, parse_clef_response
-from services.clef_prompt import IS_AD_INSTRUCTIONS, RISK_CRITERIA, build_questions
+from services.clef_prompt import (
+    IS_AD_INSTRUCTIONS,
+    RISK_CRITERIA,
+    RISK_INSTRUCTIONS,
+    build_questions,
+)
 
 
 class TestParseClefResponse:
@@ -104,6 +109,16 @@ class TestPrompt:
         assert q["risk"]["type"] == "score"
         assert q["risk"]["criteria"] == RISK_CRITERIA
         assert IS_AD_INSTRUCTIONS.startswith("判断该 Telegram")
+
+    def test_grey_market_hard_ad_guidance(self):
+        """实物灰市硬广要判是，正规短报价仍判否。"""
+        text = IS_AD_INSTRUCTIONS
+        for term in ("抵押车", "走私车", "水车", "天津港半价", "走私电子", "专卖"):
+            assert term in text
+        assert "SaaS 报价" in text
+        assert "正规短报价仍判「否」" in text
+        assert "域名防红" in text
+        assert "抵押车" in RISK_INSTRUCTIONS
 
     def test_join_and_message_state(self):
         assert "昵称：张三" in build_join_state("张三", "hello")
