@@ -11,6 +11,7 @@ from config import Config
 from database.models import DatabaseManager
 from utils.logger import logger
 from utils.rate_limiter import rate_limiter
+from utils.telegram_identity import ordinary_user
 
 
 class BlacklistHandler:
@@ -117,12 +118,13 @@ class BlacklistHandler:
             except Exception as e:
                 logger.error(f"删除被举报消息失败: {e}", exc_info=True)
 
-            # 封禁发送者（检查target_message.from_user是否存在）
-            if target_message.from_user:
+            # 只封禁可追责的普通用户。频道转发和匿名管理员的 from 是共用服务身份。
+            target_user = ordinary_user(target_message)
+            if target_user is not None:
                 try:
                     await context.bot.ban_chat_member(
                         chat_id=message.chat.id,
-                        user_id=target_message.from_user.id,
+                        user_id=target_user.id,
                         until_date=(
                             Config.BLACKLIST_CONFIG["ban_duration"]
                             if Config.BLACKLIST_CONFIG["ban_duration"] > 0
@@ -133,15 +135,15 @@ class BlacklistHandler:
                     # 记录封禁
                     ban_id = self.db.add_ban_record(
                         chat_id=message.chat.id,
-                        user_id=target_message.from_user.id,
+                        user_id=target_user.id,
                         reason=f"发送垃圾内容被举报 - 类型: {blacklist_type}",
                         banned_by=message.from_user.id,
                     )
 
                     logger.info(
                         f"[SPAM_REPORT] 已封禁发送者 | "
-                        f"user_id={target_message.from_user.id} "
-                        f"username={target_message.from_user.username} "
+                        f"user_id={target_user.id} "
+                        f"username={target_user.username} "
                         f"chat_id={message.chat.id} "
                         f"blacklist_type={blacklist_type} "
                         f"reporter_id={message.from_user.id}"
@@ -150,7 +152,7 @@ class BlacklistHandler:
                 except Exception as e:
                     logger.error(f"封禁发送者失败: {e}", exc_info=True)
             else:
-                logger.warning(f"无法封禁发送者：消息发送者为空（可能是频道消息）")
+                logger.warning("举报目标不是普通用户，已记录内容黑名单，未封禁服务身份")
 
             # 记录操作
             self.db.add_action_log(
@@ -172,7 +174,13 @@ class BlacklistHandler:
                 )
 
             # 发送确认消息
-            confirm_text = f"已添加到黑名单并处理\n类型: {blacklist_type}\n内容: {content}\n已删除消息并封禁发送者"
+            if target_user is not None:
+                sender_note = "已删除消息并封禁发送者"
+            else:
+                sender_note = "已删除消息。发送者不是普通用户，未封禁、未写入用户黑名单"
+            confirm_text = (
+                f"已添加到黑名单并处理\n类型: {blacklist_type}\n内容: {content}\n{sender_note}"
+            )
             if global_success:
                 confirm_text += "\n✅ 已贡献到通用黑名单"
 
@@ -291,15 +299,20 @@ class BlacklistHandler:
         group_settings: Dict,
     ):
         """处理文字消息的举报"""
-        # 检查目标消息发送者是否存在
-        if not target_message.from_user:
-            logger.warning("跳过处理文字消息举报：目标消息发送者为空（可能是频道消息）")
-            await self._send_error_message(message, context, "无法举报此消息：发送者信息不可用")
+        # 举报计数按用户累计。服务身份和频道身份是共用的，不能当作用户键。
+        target_user = ordinary_user(target_message)
+        if target_user is None:
+            logger.warning("跳过文字举报计数：目标不是普通用户")
+            await self._send_error_message(
+                message,
+                context,
+                "无法按用户举报此消息：发送者是频道、匿名管理员或 Telegram 服务身份",
+            )
             return
 
         # 增加举报计数
         report_info = self.db.increment_text_report_count(
-            chat_id=message.chat.id, user_id=target_message.from_user.id, message_hash=message_hash
+            chat_id=message.chat.id, user_id=target_user.id, message_hash=message_hash
         )
 
         # 记录操作
@@ -339,7 +352,7 @@ class BlacklistHandler:
             try:
                 await context.bot.ban_chat_member(
                     chat_id=message.chat.id,
-                    user_id=target_message.from_user.id,
+                    user_id=target_user.id,
                     until_date=(
                         Config.BLACKLIST_CONFIG["ban_duration"]
                         if Config.BLACKLIST_CONFIG["ban_duration"] > 0
@@ -350,14 +363,12 @@ class BlacklistHandler:
                 # 记录封禁
                 ban_id = self.db.add_ban_record(
                     chat_id=message.chat.id,
-                    user_id=target_message.from_user.id,
+                    user_id=target_user.id,
                     reason=f"文字消息被举报{self.db.text_spam_threshold}次以上，自动加入黑名单",
                     banned_by=message.from_user.id,
                 )
 
-                logger.info(
-                    f"已封禁文字消息发送者: {target_message.from_user.username} (ID: {target_message.from_user.id})"
-                )
+                logger.info(f"已封禁文字消息发送者: {target_user.username} (ID: {target_user.id})")
 
             except Exception as e:
                 logger.error(f"封禁文字消息发送者失败: {e}", exc_info=True)
@@ -439,9 +450,10 @@ class BlacklistHandler:
         self, message: Message, context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
         """检查群组黑名单"""
-        # 检查用户 ID 黑名单（clef-flash / 手动拉黑的广告号）
-        if message.from_user:
-            user_id_str = str(message.from_user.id)
+        # 只把普通用户和 user 黑名单比对。历史服务身份脏数据因此不会再命中。
+        sender = ordinary_user(message)
+        if sender is not None:
+            user_id_str = str(sender.id)
             if self.db.check_blacklist(message.chat.id, "user", user_id_str):
                 await self._handle_blacklist_violation(
                     message, context, "user", user_id_str, "group"
@@ -504,9 +516,10 @@ class BlacklistHandler:
         self, message: Message, context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
         """检查通用黑名单"""
-        # 检查用户 ID 黑名单
-        if message.from_user:
-            user_id_str = str(message.from_user.id)
+        # 服务身份同样不能命中通用 user 黑名单，否则一条误判会跨群连带频道帖。
+        sender = ordinary_user(message)
+        if sender is not None:
+            user_id_str = str(sender.id)
             if self.db.check_global_blacklist("user", user_id_str):
                 self.db.increment_global_blacklist_usage("user", user_id_str)
                 await self._handle_blacklist_violation(
@@ -569,18 +582,19 @@ class BlacklistHandler:
         source: str = "group",
     ):
         """处理黑名单违规"""
-        # 检查消息发送者是否存在（频道消息的from_user为None）
-        if not message.from_user:
-            logger.warning("跳过黑名单违规处理：消息发送者为空（可能是频道消息）")
-            # 仍然删除违规消息，即使无法封禁发送者
+        # 内容黑名单仍删除消息。没有普通用户时不封禁伪造的 from。
+        user = ordinary_user(message)
+        if user is None:
+            logger.warning(
+                "黑名单命中但发送者不是普通用户，只删除消息，不封禁 "
+                f"chat_id={message.chat.id} type={violation_type}"
+            )
             try:
                 await message.delete()
                 logger.info(f"已删除违规消息: {message.message_id}")
             except Exception as e:
                 logger.error(f"删除消息失败: {e}", exc_info=True)
             return
-
-        user = message.from_user
         chat = message.chat
 
         source_text = "通用黑名单" if source == "global" else "群组黑名单"

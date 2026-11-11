@@ -18,6 +18,7 @@ from database.models import DatabaseManager
 from services.clef_client import ClefClient, ClefScore, clef_client
 from services.sticker_set_cache import lookup_sticker_set_title
 from utils.logger import logger
+from utils.telegram_identity import is_service_user_id, ordinary_user
 
 # 视为「新加入」的目标状态
 _JOIN_NEW_STATUSES = {
@@ -90,6 +91,11 @@ def is_join_transition(old_status: str, new_status: str) -> bool:
     return old_status in _JOIN_OLD_STATUSES and new_status in _JOIN_NEW_STATUSES
 
 
+def join_user_is_not_ordinary(user: User) -> bool:
+    """机器人或 Telegram 服务身份没有可评分的入群资料。"""
+    return bool(user.is_bot) or is_service_user_id(user.id)
+
+
 class ClefHandler:
     """clef-flash 入群 / 首条消息检测处理器。"""
 
@@ -127,8 +133,9 @@ class ClefHandler:
         if getattr(chat, "type", None) not in ("group", "supergroup"):
             return
 
-        if user.is_bot:
-            logger.debug(f"clef: 跳过机器人入群 user_id={user.id}")
+        # 服务身份不是群成员。已有的 user 黑名单脏数据也不能在这里把 777000 封掉。
+        if join_user_is_not_ordinary(user):
+            logger.debug(f"clef: 跳过非普通用户入群 user_id={user.id}")
             return
 
         # 跳过管理员/群主（防御性；通常不会从 left→administrator 走此分支）
@@ -194,7 +201,8 @@ class ClefHandler:
         有文本或说明时用原文。没有文字但贴纸带 set_name 时，用贴纸包标题
         （可附带 set_name）当作正文。无 set_name，或 getStickerSet 失败，则跳过。
         命中后的删消息、本群封禁、本群 user 黑名单与现有首条相同，不把 set_name
-        写入贴纸黑名单。
+        写入贴纸黑名单。频道自动转发、sender_chat 和 Telegram 服务身份没有
+        可追责的个人，不评分、不封禁、不写入 user 黑名单。
 
         Returns:
             True 表示已处理（命中并封禁），调用方应停止后续逻辑。
@@ -209,13 +217,14 @@ class ClefHandler:
         """返回 (user, chat, 原文)。原文可为空，留给贴纸包标题。不符合则 None。"""
         if not self.enabled:
             return None
-        if message is None or message.from_user is None or message.chat is None:
+        if message is None or message.chat is None:
+            return None
+        # 伪造的 from（777000 / 匿名管理员 / 频道身份）不能当作首条消息的用户。
+        user = ordinary_user(message)
+        if user is None or user.is_bot:
             return None
 
-        user = message.from_user
         chat = message.chat
-        if user.is_bot:
-            return None
 
         text = plain_message_text(message)
         if text or sticker_set_name(message):
@@ -334,7 +343,12 @@ class ClefHandler:
         """封禁用户并写入本群 user 黑名单。封禁成功返回 True。
 
         用户 ID 只进当前群。通用黑名单没有逐条删除，写进去后其他群无法撤销误伤。
+        服务身份在这里直接拒绝，避免调用方漏掉身份判断后仍去封禁 777000。
         """
+        if is_service_user_id(user.id):
+            logger.warning(f"clef: 拒绝封禁或拉黑服务身份 user={user.id}")
+            return False
+
         user_content = str(user.id)
 
         try:
