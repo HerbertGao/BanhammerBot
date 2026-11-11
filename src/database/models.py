@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
 from config import Config
 from utils.logger import logger
+from utils.telegram_identity import is_service_user_blacklist
 
 
 def retry_on_operational_error(
@@ -245,6 +246,9 @@ class DatabaseManager:
         self, chat_id: int, blacklist_type: str, content: str, created_by: int
     ) -> bool:
         """添加内容到群组黑名单（带 OperationalError 重试）"""
+        if is_service_user_blacklist(blacklist_type, content):
+            logger.warning(f"拒绝写入 user 黑名单：Telegram 服务身份 {content}")
+            return False
         retry_config = Config.DATABASE_RETRY_CONFIG
         max_retries = retry_config.get("max_retries", 3)
         base_delay = retry_config.get("base_delay", 0.1)
@@ -301,6 +305,9 @@ class DatabaseManager:
         self, blacklist_type: str, content: str, contributed_by: int
     ) -> bool:
         """添加内容到通用黑名单（带 OperationalError 重试）"""
+        if is_service_user_blacklist(blacklist_type, content):
+            logger.warning(f"拒绝写入通用 user 黑名单：Telegram 服务身份 {content}")
+            return False
         retry_config = Config.DATABASE_RETRY_CONFIG
         max_retries = retry_config.get("max_retries", 3)
         base_delay = retry_config.get("base_delay", 0.1)

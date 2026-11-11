@@ -17,6 +17,7 @@ from handlers.admin_handler import AdminHandler
 from handlers.blacklist_handler import BlacklistHandler
 from handlers.clef_handler import ClefHandler
 from utils.logger import logger
+from utils.telegram_identity import ordinary_user
 
 
 class BanhammerBot:
@@ -399,17 +400,15 @@ class BanhammerBot:
             }
             logger.debug(f"处理消息: {msg_info}")
 
-        # 检查消息发送者是否存在（频道消息的from_user为None）
-        if message.from_user:
-            # 检查用户权限 - 管理员和群主的消息跳过检测
+        # 频道自动转发、以频道身份发送和匿名管理员的 from 是伪造的服务身份。
+        # 不能按这个 id 做管理员豁免，也不能把它送去 getChatMember。
+        sender = ordinary_user(message)
+        if sender is not None:
             if await self._is_admin_or_creator(message):
-                logger.info(
-                    f"管理员消息，跳过检测: {message.from_user.username} (ID: {message.from_user.id})"
-                )
+                logger.info(f"管理员消息，跳过检测: {sender.username} (ID: {sender.id})")
                 return
         else:
-            # 频道消息，继续进行黑名单检测
-            logger.debug("检测到频道消息，继续黑名单检测")
+            logger.debug("消息没有普通用户身份，继续内容检测")
 
         # 先走已有黑名单，避免已拉黑用户等 clef 超时
         if await self.blacklist_handler.check_blacklist(message, context):
