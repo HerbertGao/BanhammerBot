@@ -9,7 +9,7 @@ from __future__ import annotations
 from html import escape
 from typing import Optional
 
-from telegram import Chat, ChatMember, ChatMemberUpdated, Message, Update, User
+from telegram import Chat, ChatMemberUpdated, Message, Update, User
 from telegram.constants import ChatMemberStatus, ParseMode
 from telegram.ext import ContextTypes
 
@@ -17,6 +17,7 @@ from config import Config
 from database.models import DatabaseManager
 from services.clef_client import ClefClient, ClefScore, clef_client
 from services.sticker_set_cache import lookup_sticker_set_title
+from services.variant_review import VariantReview
 from utils.logger import logger
 from utils.telegram_identity import is_service_user_id, ordinary_user
 
@@ -106,6 +107,7 @@ class ClefHandler:
     ):
         self.db = db if db is not None else DatabaseManager()
         self.client = client if client is not None else clef_client
+        self.variant = VariantReview(db=self.db, client=self.client)
 
     @property
     def enabled(self) -> bool:
@@ -204,14 +206,77 @@ class ClefHandler:
         写入贴纸黑名单。频道自动转发、sender_chat 和 Telegram 服务身份没有
         可追责的个人，不评分、不封禁、不写入 user 黑名单。
 
+        变体复评默认关闭。打开后，已有 message_scored_at 的普通用户仍会因
+        跨小时的近似文本再评当前消息；编辑过的消息不在订阅里，不会进这里。
+
         Returns:
             True 表示已处理（命中并封禁），调用方应停止后续逻辑。
         """
         prepared = await self._prepare_first_message(message, context)
-        if prepared is None:
+        if prepared is not None:
+            return await self._finish_first_message(message, context, prepared)
+        return await self._review_scored_variant(message, context)
+
+    async def _finish_first_message(
+        self,
+        message: Message,
+        context: ContextTypes.DEFAULT_TYPE,
+        prepared: tuple[User, Chat, str],
+    ) -> bool:
+        """走原来的首条单句评分，未封禁时才把文本记入变体窗口。"""
+        user, chat, _text = prepared
+        banned = await self._enforce_first_message_score(message, context, user, chat, _text)
+        if banned:
+            return True
+        await self._remember_cleared_text(message, user, chat)
+        return False
+
+    async def _remember_cleared_text(self, message: Message, user: User, chat: Chat) -> None:
+        text = plain_message_text(message)
+        if not text or not self.db.has_clef_message_scored(chat.id, user.id):
+            return
+        try:
+            await self.variant.observe(
+                chat_id=chat.id, user_id=user.id, message_id=message.message_id, text=text
+            )
+        except Exception as exc:
+            logger.error(f"clef variant: 记录首条骨架失败: {type(exc).__name__}")
+
+    async def _review_scored_variant(
+        self, message: Message, context: ContextTypes.DEFAULT_TYPE
+    ) -> bool:
+        """已评过首条的用户，证据够时只复评当前这条。"""
+        if message is None or getattr(message, "chat", None) is None:
             return False
-        user, chat, text = prepared
-        return await self._enforce_first_message_score(message, context, user, chat, text)
+        if self.variant.mode_for(message.chat.id) == "off":
+            return False
+        subject = self._first_message_subject(message)
+        if subject is None:
+            return False
+        user, chat, text = subject
+        if not text or not self.db.has_clef_message_scored(chat.id, user.id):
+            return False
+        if await self._is_admin(chat.id, user.id, context):
+            return False
+
+        async def _bio() -> str:
+            return await self._fetch_bio(user.id, context)
+
+        decision = await self.variant.consider(
+            chat_id=chat.id,
+            user_id=user.id,
+            message_id=message.message_id,
+            nickname=display_name(user),
+            text=text,
+            bio_provider=_bio,
+        )
+        if decision.action != "ban" or decision.is_ad is None:
+            return False
+        if decision.is_ad < self.variant.threshold():
+            return False
+        return await self._ban_variant_message(
+            message, context, user, chat, decision.is_ad, decision.risk or 0.0
+        )
 
     def _first_message_subject(self, message: Message) -> Optional[tuple[User, Chat, str]]:
         """返回 (user, chat, 原文)。原文可为空，留给贴纸包标题。不符合则 None。"""
@@ -306,6 +371,34 @@ class ClefHandler:
                 f"(is_ad={score.is_ad:.3f}, risk={score.risk_score:.2f})"
             ),
             action_type="clef_message_ban",
+        )
+        if banned:
+            self._mark_both_scored(chat.id, user.id)
+        return banned
+
+    async def _ban_variant_message(
+        self,
+        message: Message,
+        context: ContextTypes.DEFAULT_TYPE,
+        user: User,
+        chat: Chat,
+        is_ad: float,
+        risk: float,
+    ) -> bool:
+        """处罚当前消息。日志和封禁记录不保存正文。"""
+        try:
+            await message.delete()
+            logger.info(f"clef variant: 已删除当前消息 message_id={message.message_id}")
+        except Exception as exc:
+            logger.error(f"clef variant: 删除消息失败: {type(exc).__name__}")
+        banned = await self._ban_user(
+            context=context,
+            chat=chat,
+            user=user,
+            score=ClefScore(is_ad=is_ad, risk_score=risk),
+            content="variant_review",
+            reason=f"clef-flash 变体复评当前消息命中 (is_ad={is_ad:.3f})",
+            action_type="clef_variant_ban",
         )
         if banned:
             self._mark_both_scored(chat.id, user.id)

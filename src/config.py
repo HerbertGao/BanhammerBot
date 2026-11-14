@@ -99,6 +99,45 @@ def _parse_float_env(name: str, default: float) -> float:
         return default
 
 
+def _parse_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    """解析整数环境变量。越界或非法时回退 default。"""
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = int(str(raw).strip())
+    except ValueError:
+        return default
+    if value < minimum or value > maximum:
+        return default
+    return value
+
+
+def parse_variant_mode(raw: str | None) -> str:
+    """变体复评模式。无法识别时关闭，避免误开处罚。"""
+    if raw is None or not str(raw).strip():
+        return "off"
+    value = str(raw).strip().lower()
+    if value in {"off", "shadow", "enforce"}:
+        return value
+    return "off"
+
+
+def _parse_chat_ids(name: str) -> frozenset[int]:
+    """逗号分隔的群 ID。空表示不按群限制。"""
+    raw = os.getenv(name, "")
+    parsed: list[int] = []
+    for part in str(raw).split(","):
+        text = part.strip()
+        if not text:
+            continue
+        try:
+            parsed.append(int(text))
+        except ValueError:
+            continue
+    return frozenset(parsed)
+
+
 class Config:
     """Bot 配置类"""
 
@@ -201,6 +240,46 @@ class Config:
     CLEF_AUTO_KICK_THRESHOLD = _clef_threshold if 0.0 < _clef_threshold <= 1.0 else 0.80
     CLEF_TIMEOUT = _parse_float_env("CLEF_TIMEOUT", 15.0)
 
+    # 慢变体复评。默认关闭。下面的数字是未实测的保守假设，需影子流量再调。
+    # 次数、相似度和间隔只决定要不要再问模型，不能直接删除或封禁。
+    VARIANT_REVIEW_CONFIG = {
+        "mode": parse_variant_mode(os.getenv("CLEF_VARIANT_MODE")),
+        "chat_ids": _parse_chat_ids("CLEF_VARIANT_CHAT_IDS"),
+        "min_similar": _parse_int_env("CLEF_VARIANT_MIN_SIMILAR", 4, 3, 20),
+        "min_span_seconds": _parse_int_env("CLEF_VARIANT_MIN_SPAN_SECONDS", 1200, 300, 86400),
+        "cooldown_seconds": _parse_int_env("CLEF_VARIANT_COOLDOWN_SECONDS", 3600, 60, 86400),
+        "max_reviews": _parse_int_env("CLEF_VARIANT_MAX_REVIEWS", 4, 1, 20),
+        "window_seconds": _parse_int_env("CLEF_VARIANT_WINDOW_SECONDS", 86400, 3600, 604800),
+        "backoff_seconds": _parse_int_env("CLEF_VARIANT_BACKOFF_SECONDS", 21600, 300, 604800),
+        "failure_cooldown_seconds": _parse_int_env(
+            "CLEF_VARIANT_FAILURE_COOLDOWN_SECONDS", 900, 30, 86400
+        ),
+        "sample_ttl_seconds": _parse_int_env(
+            "CLEF_VARIANT_SAMPLE_TTL_SECONDS", 129600, 3600, 604800
+        ),
+        "max_samples": _parse_int_env("CLEF_VARIANT_MAX_SAMPLES", 8, 4, 20),
+        "excerpt_chars": 80,
+        "skeleton_chars": 96,
+        "current_chars": 400,
+        "history_limit": 3,
+        "global_hourly_budget": _parse_int_env("CLEF_VARIANT_GLOBAL_HOURLY", 60, 1, 10000),
+        "max_inflight": _parse_int_env("CLEF_VARIANT_MAX_INFLIGHT", 2, 1, 20),
+        "similarity_ratio": 0.90,
+        "plain_ratio": 0.96,
+        "min_length_ratio": 0.75,
+        "inflight_hold_seconds": 30,
+    }
+
+
+def _warn_variant_mode(warnings: list[str]) -> None:
+    """无法识别的模式保持关闭，并给出提示。"""
+    raw_variant_mode = os.getenv("CLEF_VARIANT_MODE")
+    if raw_variant_mode is None or not str(raw_variant_mode).strip():
+        return
+    if str(raw_variant_mode).strip().lower() in {"off", "shadow", "enforce"}:
+        return
+    warnings.append(f"CLEF_VARIANT_MODE={raw_variant_mode!r} 无法识别，变体复评保持关闭。")
+
 
 def validate_config() -> tuple[bool, list[str]]:
     """验证配置完整性
@@ -267,6 +346,8 @@ def validate_config() -> tuple[bool, list[str]]:
             warnings.append(
                 f"CLEF_AUTO_KICK_THRESHOLD={raw_threshold!r} 不在 (0, 1]，已改用 0.80。"
             )
+
+    _warn_variant_mode(warnings)
 
     # 合并错误和警告
     all_messages = []
