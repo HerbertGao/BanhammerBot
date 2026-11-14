@@ -161,6 +161,7 @@ class TestVariantHandler:
         context.bot.ban_chat_member.assert_awaited()
         assert handler.db.check_blacklist(CHAT, "user", str(USER)) is True
         assert handler.db.check_global_blacklist("user", str(USER)) is False
+        assert handler.db.has_clef_join_scored(CHAT, USER) is True
         with sqlite3.connect(handler.db.db_path) as connection:
             content = connection.execute(
                 "SELECT target_content FROM action_logs WHERE action_type = 'clef_variant_ban'"
@@ -243,6 +244,7 @@ class TestVariantHandler:
             await blacklist.handle_unban_command(MagicMock(message=command), context)
         assert handler.db.check_blacklist(CHAT, "user", str(USER)) is False
         assert handler.db.has_clef_message_scored(CHAT, USER) is True
+        assert handler.db.has_clef_join_scored(CHAT, USER) is True
         assert _samples(handler.db) == []
 
     async def test_caption_uses_the_same_variant_path(self, temp_db_path):

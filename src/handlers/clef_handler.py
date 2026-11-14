@@ -391,7 +391,7 @@ class ClefHandler:
             logger.info(f"clef variant: 已删除当前消息 message_id={message.message_id}")
         except Exception as exc:
             logger.error(f"clef variant: 删除消息失败: {type(exc).__name__}")
-        return await self._ban_user(
+        banned = await self._ban_user(
             context=context,
             chat=chat,
             user=user,
@@ -400,6 +400,9 @@ class ClefHandler:
             reason=f"clef-flash 变体复评当前消息命中 (is_ad={is_ad:.3f})",
             action_type="clef_variant_ban",
         )
+        if banned:
+            self._mark_both_scored(chat.id, user.id)
+        return banned
 
     def _mark_both_scored(self, chat_id: int, user_id: int) -> None:
         """封禁已经做出，两条路径都不再打分，否则 /unban 后会被另一条路径立刻打回。"""
