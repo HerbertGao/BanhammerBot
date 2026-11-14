@@ -19,6 +19,10 @@ from handlers.clef_handler import ClefHandler
 from utils.logger import logger
 from utils.telegram_identity import ordinary_user
 
+# 只接收新消息。不订阅 edited_message / channel_post，
+# 变体复评不会作用到编辑历史或频道帖。
+POLLED_UPDATE_TYPES = ("message", "callback_query", "chat_member", "my_chat_member")
+
 
 class BanhammerBot:
     """Banhammer Bot 主类"""
@@ -94,9 +98,7 @@ class BanhammerBot:
 
         # 需要接收 chat_member（入群）与常规 message 更新
         try:
-            self.application.run_polling(
-                allowed_updates=["message", "callback_query", "chat_member", "my_chat_member"]
-            )
+            self.application.run_polling(allowed_updates=list(POLLED_UPDATE_TYPES))
         except Exception as e:
             logger.error(f"Bot 运行出错: {e}", exc_info=True)
             raise
@@ -497,10 +499,12 @@ class BanhammerBot:
         """定期清理数据库无效记录（后台任务，每天凌晨3点执行）"""
         try:
             result = self.db.cleanup_invalid_blacklist_items()
+            variant_result = self.db.cleanup_variant_tracking()
             logger.info(
                 f"数据库清理任务完成 - "
                 f"群组黑名单: {result['group_blacklist']} 条, "
-                f"通用黑名单: {result['global_blacklist']} 条"
+                f"通用黑名单: {result['global_blacklist']} 条, "
+                f"变体样本: {variant_result['samples']} 条"
             )
         except Exception as e:
             logger.error(f"清理数据库时出错: {e}", exc_info=True)

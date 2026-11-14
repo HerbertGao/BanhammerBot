@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
 from config import Config
+from database import variant_store
 from utils.logger import logger
 from utils.telegram_identity import is_service_user_blacklist
 
@@ -234,6 +235,8 @@ class DatabaseManager:
                         PRIMARY KEY (chat_id, user_id)
                     )
                 """)
+                # 慢变体的短期样本。不改写、不删除上面的已评分记录。
+                variant_store.create_tables(cursor)
 
                 conn.commit()
                 logger.info("数据库初始化完成")
@@ -1002,6 +1005,19 @@ class DatabaseManager:
                 "first_reported_at": None,
                 "last_reported_at": None,
             }
+
+    def clear_variant_tracking(self, chat_id: int, user_id: int) -> None:
+        """解除封禁时清掉该用户在本群的变体窗口，保留 clef 已评分标记。"""
+        variant_store.clear_user(self.db_path, chat_id, user_id)
+
+    def cleanup_variant_tracking(self, now: float | None = None) -> dict[str, int]:
+        """删除过期变体样本。不触碰 clef_scored_users。"""
+        ttl = Config.VARIANT_REVIEW_CONFIG.get("sample_ttl_seconds", 129600)
+        return variant_store.cleanup(
+            self.db_path,
+            now=time.time() if now is None else now,
+            ttl_seconds=float(ttl),
+        )
 
     def cleanup_invalid_blacklist_items(self) -> CleanupResult:
         """清理无效的黑名单项"""

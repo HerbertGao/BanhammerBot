@@ -102,59 +102,68 @@ class ClefClient:
         """是否已启用且具备必要凭证。"""
         return bool(self.enabled and self.account_id and self.api_token)
 
-    async def score_profile(self, state: str) -> Optional[ClefScore]:
+    async def score_profile(self, state: str, questions: dict | None = None) -> Optional[ClefScore]:
         """对给定 state 文本评分；禁用或出错时返回 None（fail-open）。"""
-        if not self.is_configured():
-            return None
+        score, _error = await self.score_profile_detailed(state, questions)
+        return score
 
+    async def score_profile_detailed(
+        self, state: str, questions: dict | None = None
+    ) -> tuple[Optional[ClefScore], Optional[str]]:
+        """评分，并返回不含正文的错误码。失败时不表示已通过。"""
+        if not self.is_configured():
+            return None, "disabled"
         if not state or not str(state).strip():
             logger.debug("clef-flash: 空 state，跳过")
-            return None
+            return None, "empty"
+        try:
+            response = await self._post(state, questions)
+        except httpx.TimeoutException:
+            logger.warning("clef-flash 请求超时（fail-open）")
+            return None, "timeout"
+        except httpx.HTTPError as exc:
+            logger.warning(f"clef-flash 网络错误（fail-open）: {type(exc).__name__}")
+            return None, "network"
+        except Exception as exc:
+            logger.error(f"clef-flash 未知错误（fail-open）: {type(exc).__name__}: {exc}")
+            return None, "error"
+        return self._interpret(response)
 
+    async def _post(self, state: str, questions: dict | None) -> httpx.Response:
         url = f"{API_BASE}{API_PATH.format(account_id=self.account_id, model=CLEF_MODEL)}"
         body = {
             "model": "clef-flash",
             "state": state,
-            "questions": build_questions(),
+            "questions": questions if questions is not None else build_questions(),
         }
         headers = {
             "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
         }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            return await client.post(url, json=body, headers=headers)
 
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(url, json=body, headers=headers)
-        except httpx.TimeoutException:
-            logger.warning("clef-flash 请求超时（fail-open）")
-            return None
-        except httpx.HTTPError as e:
-            # 不记录 headers / token
-            logger.warning(f"clef-flash 网络错误（fail-open）: {type(e).__name__}")
-            return None
-        except Exception as e:
-            logger.error(f"clef-flash 未知错误（fail-open）: {type(e).__name__}: {e}")
-            return None
-
+    def _interpret(self, response: httpx.Response) -> tuple[Optional[ClefScore], Optional[str]]:
+        if response.status_code == 429:
+            logger.warning("clef-flash HTTP 429（fail-open）")
+            return None, "http_429"
         if response.status_code != 200:
             logger.warning(
-                f"clef-flash HTTP {response.status_code}（fail-open），body_len={len(response.content)}"
+                f"clef-flash HTTP {response.status_code}（fail-open），"
+                f"body_len={len(response.content)}"
             )
-            return None
-
+            return None, "http_status"
         try:
             payload = response.json()
         except ValueError:
             logger.warning("clef-flash 响应非 JSON（fail-open）")
-            return None
-
+            return None, "bad_json"
         score = parse_clef_response(payload)
         if score is None:
             logger.warning("clef-flash 响应解析失败（fail-open）")
-            return None
-
+            return None, "parse"
         logger.debug(f"clef-flash 评分: is_ad={score.is_ad:.4f} risk={score.risk_score:.4f}")
-        return score
+        return score, None
 
 
 # 模块级默认客户端，便于 handler 复用

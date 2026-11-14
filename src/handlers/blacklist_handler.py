@@ -717,6 +717,9 @@ class BlacklistHandler:
                     )
                     return
 
+                # 清掉变体窗口，避免解封后立刻被旧样本打回。clef 已评分标记保留。
+                self.db.clear_variant_tracking(message.chat.id, user_id)
+
                 # 记录操作
                 self.db.add_action_log(
                     chat_id=message.chat.id,
